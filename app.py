@@ -3,6 +3,9 @@ import smtplib
 import sqlite3
 import ssl
 import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from pathlib import Path
@@ -30,52 +33,40 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST
 history = HistoryStore(DB)
 
 
-def send_feedback_notification(*, feedback_id, submitted_at, name, email,
-                               category, subject, message):
-    """Send a notification using SMTP settings injected at deployment time."""
-    host = os.getenv("SMTP_HOST", "").strip()
-    if not host:
-        raise RuntimeError("Feedback email is not configured: SMTP_HOST is missing")
+def trigger_jenkins_feedback_email(*, feedback_id, submitted_at, name, email,
+                                   category, subject, message):
+    """Trigger the dedicated Jenkins job that sends the feedback email."""
+    base_url = os.getenv("JENKINS_URL", "").strip().rstrip("/")
+    job_name = os.getenv("JENKINS_FEEDBACK_JOB", "Report_Parser_Feedback_Notification").strip()
+    username = os.getenv("JENKINS_USER", "").strip()
+    api_token = os.getenv("JENKINS_API_TOKEN", "")
+    if not base_url or not username or not api_token:
+        raise RuntimeError("Jenkins feedback notification is not configured")
 
-    port = int(os.getenv("SMTP_PORT", "587"))
-    username = os.getenv("SMTP_USER", "").strip()
-    password = os.getenv("SMTP_PASSWORD", "")
-    sender = os.getenv("FEEDBACK_FROM_EMAIL", "").strip() or username
-    if not sender:
-        raise RuntimeError(
-            "Feedback email is not configured: FEEDBACK_FROM_EMAIL or SMTP_USER is required"
-        )
-    if not FEEDBACK_RECIPIENTS:
-        raise RuntimeError("Feedback email is not configured: no recipients are set")
-
-    mail = EmailMessage()
-    mail["Subject"] = f"[GCT Insight Feedback] {category}: {subject or 'New feedback'}"
-    mail["From"] = sender
-    mail["To"] = ", ".join(FEEDBACK_RECIPIENTS)
-    mail.set_content(
-        "A user submitted feedback to GCT Insight.\n\n"
-        f"Feedback ID: {feedback_id}\n"
-        f"Submitted at (UTC): {submitted_at}\n"
-        f"Name: {name or 'Not provided'}\n"
-        f"Reply email: {email or 'Not provided'}\n"
-        f"Category: {category}\n"
-        f"Subject: {subject or 'Not provided'}\n\n"
-        "Feedback message:\n"
-        f"{message}\n"
+    # Jenkins job must be a parameterized Pipeline job. URL-encode every value.
+    params = {
+        "FEEDBACK_ID": str(feedback_id),
+        "SUBMITTED_AT": submitted_at,
+        "FEEDBACK_NAME": name or "Not provided",
+        "FEEDBACK_EMAIL": email,
+        "FEEDBACK_CATEGORY": category,
+        "FEEDBACK_SUBJECT": subject or "New feedback",
+        "FEEDBACK_MESSAGE": message,
+    }
+    url = f"{base_url}/job/{urllib.parse.quote(job_name, safe='')}/buildWithParameters"
+    data = urllib.parse.urlencode(params).encode("utf-8")
+    auth = __import__("base64").b64encode(f"{username}:{api_token}".encode()).decode()
+    req = urllib.request.Request(
+        url, data=data, method="POST",
+        headers={"Authorization": f"Basic {auth}",
+                 "Content-Type": "application/x-www-form-urlencoded"},
     )
-
-    context = ssl.create_default_context()
-    with smtplib.SMTP(host, port, timeout=15) as smtp:
-        smtp.ehlo()
-        if port in (465,):
-            # Port 465 expects implicit TLS; handled by SMTP_SSL below instead.
-            raise RuntimeError("Use SMTP_PORT=587 with STARTTLS for this configuration")
-        if smtp.has_extn("starttls"):
-            smtp.starttls(context=context)
-            smtp.ehlo()
-        if username:
-            smtp.login(username, password)
-        smtp.send_message(mail)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            if response.status not in (200, 201, 202):
+                raise RuntimeError(f"Jenkins returned HTTP {response.status}")
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"Jenkins rejected feedback notification (HTTP {exc.code})") from exc
 
 
 @app.get("/")
@@ -130,7 +121,7 @@ def submit_feedback():
 
     # Save first, then notify. A mail outage must never discard user feedback.
     try:
-        send_feedback_notification(
+        trigger_jenkins_feedback_email(
             feedback_id=feedback_id,
             submitted_at=submitted_at,
             name=name,
@@ -145,7 +136,7 @@ def submit_feedback():
                 (feedback_id,),
             )
         return jsonify({
-            "message": "Thank you! Your feedback was saved and the app administrator has been notified."
+            "message": "Thank you! Your feedback was saved and the administrator email notification was queued through Jenkins."
         }), 200
     except Exception:
         app.logger.exception("Feedback %s was saved, but email notification failed", feedback_id)
@@ -155,7 +146,7 @@ def submit_feedback():
                 (feedback_id,),
             )
         return jsonify({
-            "message": "Your feedback was saved, but the email notification could not be sent. Please try again later.",
+            "message": "Your feedback was saved, but Jenkins could not queue the email notification. Please try again later.",
             "notificationSent": False,
         }), 202
 
