@@ -53,6 +53,7 @@ function render(){
   if(fingerprintMismatch){
     statsEl.innerHTML="";
     suiteEl.innerHTML="";
+    $("completionOverview").innerHTML="";$("visualCharts").innerHTML="";
     if(issuesEl) issuesEl.classList.add("hidden");
     $("publishBtn").disabled=false;
     $("viewBtn").disabled=false;
@@ -70,6 +71,36 @@ function render(){
     ["WARNINGS",format(o.warnings),"Tradefed warnings","warn"],
     ["TOTAL TESTS",format(o.totalTests),rate+"% pass rate","total"]
   ].map(x=>`<div class="stat ${x[3]}"><span>${x[0]}</span><strong>${x[1]}</strong><small>${x[2]}</small></div>`).join("");
+
+  const moduleTotal=s.reduce((sum,x)=>sum+Number(x.modules||0),0);
+  const moduleDone=s.reduce((sum,x)=>sum+Number(x.completedModules||0),0);
+  const moduleIncomplete=Math.max(0,moduleTotal-moduleDone);
+  const completionRate=moduleTotal?Math.round(moduleDone/moduleTotal*100):0;
+  $("completionOverview").innerHTML=[
+    ["TOTAL MODULES",format(moduleTotal),"Across all detected suites","metric-total"],
+    ["COMPLETED",format(moduleDone),moduleTotal?completionRate+"% completion":"No module data","metric-done"],
+    ["INCOMPLETE",format(moduleIncomplete),"Modules not yet completed","metric-incomplete"],
+    ["SUITES",format(s.length),"Detected certification suites","metric-suites"]
+  ].map(x=>`<article class="completion-metric ${x[3]}"><span>${x[0]}</span><strong>${x[1]}</strong><small>${x[2]}</small></article>`).join("");
+
+  const outcomeItems=[
+    {label:"Passed",value:Number(o.passed||0),kind:"passed"},
+    {label:"Failed",value:Number(o.failed||0),kind:"failed"},
+    {label:"Assumption failures",value:Number(o.assumptionFailures||0),kind:"assumption"},
+    {label:"Ignored",value:Number(o.ignored||0),kind:"ignored"}
+  ];
+  const outcomeTotal=outcomeItems.reduce((sum,x)=>sum+x.value,0);
+  const outcomeBar=outcomeItems.map(x=>{
+    const width=outcomeTotal?x.value/outcomeTotal*100:0;
+    return width>0?`<span class="outcome-segment ${x.kind}" style="width:${width.toFixed(3)}%" title="${esc(x.label)}: ${format(x.value)}"></span>`:"";
+  }).join("");
+  const suiteBars=s.map(x=>{
+    const total=Number(x.modules||0),done=Number(x.completedModules||0);
+    const pct=total?Math.max(0,Math.min(100,done/total*100)):0;
+    return `<div class="chart-row"><div class="chart-label"><strong>${esc(x.name)}</strong><span>${format(done)} / ${format(total)} · ${Math.round(pct)}%</span></div><div class="chart-track" role="img" aria-label="${esc(x.name)} module completion: ${Math.round(pct)} percent"><i style="width:${pct}%"></i></div></div>`;
+  }).join("");
+  $("visualCharts").innerHTML=`<article class="chart-panel"><div class="chart-heading"><div><span class="section-kicker">MODULE PROGRESS</span><h3>Suite completion</h3></div><strong>${completionRate}%</strong></div><p class="chart-caption">Completed modules compared with total modules in each suite.</p>${suiteBars||'<div class="empty">No suite data available.</div>'}</article>
+  <article class="chart-panel"><div class="chart-heading"><div><span class="section-kicker">TEST OUTCOMES</span><h3>Execution distribution</h3></div><strong>${format(outcomeTotal)}</strong></div><p class="chart-caption">Distribution of passed, failed, assumption-failure and ignored outcomes.</p><div class="outcome-bar" role="img" aria-label="Test outcome distribution">${outcomeBar||'<span class="outcome-empty"></span>'}</div><div class="outcome-legend">${outcomeItems.map(x=>`<span><i class="legend-dot ${x.kind}"></i>${esc(x.label)} <strong>${format(x.value)}</strong></span>`).join("")}</div></article>`;
 
   $("suiteGrid").innerHTML=s.map(x=>{
     const p=x.modules?Math.round(x.completedModules/x.modules*100):0;
@@ -102,7 +133,7 @@ $("reportFiles").addEventListener("change",e=>{
 $("clearBtn").addEventListener("click",()=>{
   state.files=[];state.data=null;$("reportFiles").value="";renderFiles();
 loadHistory();$("publishBtn").disabled=true;$("viewBtn").disabled=true;
-  $("statusMessage").textContent="";$("stats").innerHTML="";$("suiteGrid").innerHTML="";
+  $("statusMessage").textContent="";$("stats").innerHTML="";$("completionOverview").innerHTML="";$("visualCharts").innerHTML="";$("suiteGrid").innerHTML="";
   $("incompleteList").innerHTML="";$("failureList").innerHTML="";
   $("incompleteCount").textContent="0";$("failureCount").textContent="0";
   $("buildMismatch").innerHTML="";
