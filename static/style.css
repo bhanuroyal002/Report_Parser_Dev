@@ -115,5 +115,3 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .certification-dashboard>.issues-grid:not(.hidden){margin-top:0;margin-bottom:0}
 @media(max-width:720px){.certification-dashboard{padding:12px;margin-bottom:22px}.certification-dashboard>.dashboard-panel{padding:4px 4px 14px}}
 
-/* Display the full GCT Insight interface at 70% scale. */
-body{zoom:0.7}
