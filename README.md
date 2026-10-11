@@ -135,19 +135,19 @@ A successful image build also means the included regression test suite passed.
 
 ## Configuration
 
-The app reads configuration from environment variables. Example values are in `.env.example`:
+The app reads configuration from environment variables. Example values are in `.env.example`. By default, the application has no fixed upload-size cap, so an individual ZIP and the combined request can exceed 1 GB. Uploads are copied to temporary files in chunks. The host disk must have enough free space, and any reverse proxy in front of the app must also permit the request size and duration. Note: relevant XML and nested ZIP entries are still read into memory during parsing; extremely large expanded entries may require additional streaming-parser work or substantial RAM.
 
 ```dotenv
 HOST=127.0.0.1
 PORT=8080
 DEBUG=false
 DATABASE_PATH=data/gct_report_parser.db
-MAX_FILE_SIZE_MB=500
-MAX_REQUEST_SIZE_MB=1024
+MAX_FILE_SIZE_MB=0
+MAX_REQUEST_SIZE_MB=0
 MAX_ZIP_DEPTH=20
-MAX_ZIP_ENTRY_MB=1024
-MAX_TOTAL_UNCOMPRESSED_MB=4096
-MAX_ZIP_ENTRIES=200000
+MAX_ZIP_ENTRY_MB=0
+MAX_TOTAL_UNCOMPRESSED_MB=0
+MAX_ZIP_ENTRIES=0
 ```
 
 ### Meaning of the key settings
@@ -156,12 +156,12 @@ MAX_ZIP_ENTRIES=200000
 - `PORT`: application port
 - `DEBUG`: enable Flask debug mode
 - `DATABASE_PATH`: SQLite database path
-- `MAX_FILE_SIZE_MB`: maximum size of an individual zip file upload
-- `MAX_REQUEST_SIZE_MB`: maximum size of the request payload
+- `MAX_FILE_SIZE_MB`: optional maximum size of an individual ZIP upload in MB; `0` disables the application-level limit (default)
+- `MAX_REQUEST_SIZE_MB`: optional maximum request size in MB; `0` disables the Flask request limit (default)
 - `MAX_ZIP_DEPTH`: maximum nested ZIP recursion depth
-- `MAX_ZIP_ENTRY_MB`: maximum expanded size of one relevant XML/ZIP entry
-- `MAX_TOTAL_UNCOMPRESSED_MB`: total expanded data budget for one analysis request
-- `MAX_ZIP_ENTRIES`: maximum ZIP entries scanned across one analysis request
+- `MAX_ZIP_ENTRY_MB`: optional maximum expanded size of one relevant XML/ZIP entry in MB; `0` disables this parser limit (default)
+- `MAX_TOTAL_UNCOMPRESSED_MB`: optional expanded-data budget in MB per analysis request; `0` disables this parser limit (default)
+- `MAX_ZIP_ENTRIES`: optional maximum ZIP entries scanned per analysis request; `0` disables this parser limit (default)
 
 ## Web app behavior
 
