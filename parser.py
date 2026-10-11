@@ -571,7 +571,15 @@ def analyze_reports(files):
         })
 
     if not all_reports:
-        raise ValueError("No recognized Tradefed test_result.xml reports were found in the uploaded ZIP files.")
+        details = "; ".join(
+            error
+            for diagnostic in diagnostics
+            for error in diagnostic["errors"][:2]
+        )
+        message = "No recognized Tradefed test_result.xml reports were found in the uploaded ZIP files."
+        if details:
+            message += f" Details: {details}"
+        raise ValueError(message)
 
     reports_by_build = OrderedDict()
     known_fingerprints = OrderedDict()
