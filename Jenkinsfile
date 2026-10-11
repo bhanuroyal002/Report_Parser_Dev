@@ -89,7 +89,7 @@ pipeline {
                         --exclude='./report-parser-*.tar.gz' \
                         -C "$WORKSPACE" .
                     cp "$PACKAGE_TMP" "$WORKSPACE/$ARTIFACT"
-                    if tar -tzf "$ARTIFACT" | grep -E '(^|/)(report-parser-[^/]*[.]tar[.]gz|__pycache__|\.ci-venv)(/|$)'; then
+                    if tar -tzf "$ARTIFACT" | grep -E '(^|/)(report-parser-[^/]*[.]tar[.]gz|__pycache__|[.]ci-venv)(/|$)'; then
                         echo "ERROR: generated files were included in the deployment package."
                         exit 1
                     fi
