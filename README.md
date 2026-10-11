@@ -145,6 +145,9 @@ DATABASE_PATH=data/gct_report_parser.db
 MAX_FILE_SIZE_MB=500
 MAX_REQUEST_SIZE_MB=1024
 MAX_ZIP_DEPTH=20
+MAX_ZIP_ENTRY_MB=1024
+MAX_TOTAL_UNCOMPRESSED_MB=4096
+MAX_ZIP_ENTRIES=200000
 ```
 
 ### Meaning of the key settings
@@ -155,7 +158,10 @@ MAX_ZIP_DEPTH=20
 - `DATABASE_PATH`: SQLite database path
 - `MAX_FILE_SIZE_MB`: maximum size of an individual zip file upload
 - `MAX_REQUEST_SIZE_MB`: maximum size of the request payload
-- `MAX_ZIP_DEPTH`: maximum nested zip recursion depth
+- `MAX_ZIP_DEPTH`: maximum nested ZIP recursion depth
+- `MAX_ZIP_ENTRY_MB`: maximum expanded size of one relevant XML/ZIP entry
+- `MAX_TOTAL_UNCOMPRESSED_MB`: total expanded data budget for one analysis request
+- `MAX_ZIP_ENTRIES`: maximum ZIP entries scanned across one analysis request
 
 ## Web app behavior
 
