@@ -61,6 +61,15 @@ fi
 
 chown -R reportparser:reportparser "$APP_DIR"
 
+# Install and enable periodic application health monitoring.
+install -m 0755 "$TMP_DIR/deploy/report-parser-healthcheck.sh" /usr/local/sbin/report-parser-healthcheck
+install -m 0644 "$TMP_DIR/deploy/report-parser-healthcheck.service" /etc/systemd/system/report-parser-healthcheck.service
+install -m 0644 "$TMP_DIR/deploy/report-parser-healthcheck.timer" /etc/systemd/system/report-parser-healthcheck.timer
+mkdir -p /var/lib/report-parser-monitoring
+chmod 0750 /var/lib/report-parser-monitoring
+systemctl daemon-reload
+systemctl enable --now report-parser-healthcheck.timer
+
 systemctl restart "$SERVICE"
 systemctl is-active --quiet "$SERVICE"
 
