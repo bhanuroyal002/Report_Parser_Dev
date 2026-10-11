@@ -1,8 +1,7 @@
 import os
-import smtplib
-import ssl
+import sqlite3
 import tempfile
-from email.message import EmailMessage
+from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, Response
@@ -44,49 +43,37 @@ def submit_feedback():
     if email and ("\n" in email or "\r" in email or "@" not in email):
         return jsonify({"error": "Enter a valid email address or leave it blank."}), 400
 
-    smtp_host = os.getenv("SMTP_HOST", "").strip()
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    smtp_user = os.getenv("SMTP_USER", "").strip()
-    smtp_password = os.getenv("SMTP_PASSWORD", "")
-    sender = os.getenv("FEEDBACK_FROM_EMAIL", smtp_user).strip()
-    recipients = [
-        address.strip() for address in os.getenv(
-            "FEEDBACK_TO_EMAILS",
-            "bhanuprakash.narla1@vantiva.com,bhanuprakash.narla@gmail.com"
-        ).split(",") if address.strip()
-    ]
-    if not smtp_host or not sender or not recipients:
-        app.logger.error("Feedback email is not configured: SMTP_HOST and FEEDBACK_FROM_EMAIL are required.")
-        return jsonify({"error": "Feedback delivery is not configured yet. Please try again later."}), 503
-
-    mail = EmailMessage()
-    mail["Subject"] = "[GCT Insight Feedback] " + (subject or category)
-    mail["From"] = sender
-    mail["To"] = recipients
-    mail.set_content(
-        "New GCT Insight feedback submission\n\n"
-        f"Category: {category}\n"
-        f"Name: {name or 'Not provided'}\n"
-        f"Reply email: {email or 'Not provided'}\n\n"
-        f"Feedback:\n{message}\n"
-    )
-    if email:
-        mail["Reply-To"] = email
-
+    # Persist feedback in the same host-mounted SQLite database used by the app.
+    # This does not require an SMTP server or expose administrator email addresses.
     try:
-        context = ssl.create_default_context()
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
-            server.ehlo()
-            server.starttls(context=context)
-            server.ehlo()
-            if smtp_user:
-                server.login(smtp_user, smtp_password)
-            server.send_message(mail)
-    except Exception:
-        app.logger.exception("Feedback email delivery failed")
-        return jsonify({"error": "We couldn't send your feedback right now. Please try again later."}), 502
+        with sqlite3.connect(DB, timeout=10) as connection:
+            connection.execute("""
+                CREATE TABLE IF NOT EXISTS user_feedback (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    submitted_at TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    reply_email TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    subject TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'NEW'
+                )
+            """)
+            connection.execute("""
+                INSERT INTO user_feedback
+                    (submitted_at, name, reply_email, category, subject, message)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                datetime.now(timezone.utc).isoformat(),
+                name, email, category, subject, message
+            ))
+    except sqlite3.Error:
+        app.logger.exception("Could not store user feedback")
+        return jsonify({"error": "We couldn't save your feedback right now. Please try again later."}), 500
 
-    return jsonify({"message": "Thank you! Your feedback has been sent."}), 200
+    return jsonify({
+        "message": "Thank you! Your feedback has been saved for the app administrator."
+    }), 200
 
 
 @app.get("/healthz")
