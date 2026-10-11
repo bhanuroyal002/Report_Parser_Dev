@@ -1,67 +1,43 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "$(id -u)" -ne 0 ]]; then
-    echo "ERROR: this deployment helper must run as root."
-    exit 1
-fi
-
-if [[ $# -ne 1 ]]; then
-    echo "Usage: $0 /path/to/report-parser-<build>.tar.gz"
-    exit 2
-fi
-
+if [[ "$(id -u)" -ne 0 ]]; then echo "ERROR: run as root."; exit 1; fi
+if [[ $# -ne 1 ]]; then echo "Usage: $0 /path/to/report-parser-<build>.tar.gz"; exit 2; fi
 ARTIFACT="$1"
 APP_DIR="/opt/report_parser"
 SERVICE="report-parser"
-
-if [[ ! -f "$ARTIFACT" ]]; then
-    echo "ERROR: artifact not found: $ARTIFACT"
-    exit 3
-fi
-
-case "$ARTIFACT" in
-    */report-parser-*.tar.gz) ;;
-    *)
-        echo "ERROR: unexpected artifact name: $ARTIFACT"
-        exit 4
-        ;;
-esac
-
+CONTAINER="report-parser-container"
+BUILD_ID="$(basename "$ARTIFACT" | sed -E 's/^report-parser-([0-9]+)[.]tar[.]gz$/\1/')"
+IMAGE="report-parser:${BUILD_ID}"
 TMP_DIR="$(mktemp -d /tmp/report-parser-deploy.XXXXXX)"
-cleanup() {
-    rm -rf "$TMP_DIR"
-}
-trap cleanup EXIT
+OLD_IMAGE=""
+HAD_CONTAINER=0
+SERVICE_WAS_ACTIVE=0
+trap 'rm -rf "$TMP_DIR"' EXIT
 
+[[ -f "$ARTIFACT" ]] || { echo "ERROR: artifact not found: $ARTIFACT"; exit 3; }
+case "$ARTIFACT" in */report-parser-*.tar.gz) ;; *) echo "ERROR: unexpected artifact name: $ARTIFACT"; exit 4;; esac
+command -v docker >/dev/null 2>&1 || { echo "ERROR: Docker is required."; exit 5; }
+docker info >/dev/null
 tar -xzf "$ARTIFACT" -C "$TMP_DIR"
 
-for required in app.py parser.py history.py report_builder.py requirements.txt gunicorn.conf.py deploy/report-parser-healthcheck.sh deploy/report-parser-healthcheck.service deploy/report-parser-healthcheck.timer; do
-    if [[ ! -f "$TMP_DIR/$required" ]]; then
-        echo "ERROR: deployment artifact is missing $required"
-        exit 5
-    fi
+for required in app.py parser.py history.py report_builder.py requirements.txt gunicorn.conf.py Dockerfile docker-compose.yml deploy/report-parser-healthcheck.sh deploy/report-parser-healthcheck.service deploy/report-parser-healthcheck.timer; do
+    [[ -f "$TMP_DIR/$required" ]] || { echo "ERROR: artifact is missing $required"; exit 6; }
 done
 
 mkdir -p "$APP_DIR/data"
+rsync -a --delete --exclude='.env' --exclude='data/' --exclude='.venv/' --exclude='.git/' "$TMP_DIR/" "$APP_DIR/"
+chown -R 10001:10001 "$APP_DIR/data"
 
-rsync -a --delete \
-    --exclude='.env' \
-    --exclude='data/' \
-    --exclude='.venv/' \
-    --exclude='.git/' \
-    "$TMP_DIR/" "$APP_DIR/"
-
-if [[ ! -x "$APP_DIR/.venv/bin/python" ]]; then
-    python3 -m venv "$APP_DIR/.venv"
+if docker container inspect "$CONTAINER" >/dev/null 2>&1; then
+    HAD_CONTAINER=1
+    OLD_IMAGE="$(docker inspect --format '{{.Config.Image}}' "$CONTAINER")"
 fi
+if systemctl is-active --quiet "$SERVICE"; then SERVICE_WAS_ACTIVE=1; fi
 
-"$APP_DIR/.venv/bin/python" -m pip install --upgrade pip
-"$APP_DIR/.venv/bin/pip" install -r "$APP_DIR/requirements.txt"
+echo "Building $IMAGE; unchanged dependency layers will use Docker cache."
+docker build --pull -t "$IMAGE" "$APP_DIR"
 
-chown -R reportparser:reportparser "$APP_DIR"
-
-# Install and enable periodic application health monitoring.
 install -m 0755 "$TMP_DIR/deploy/report-parser-healthcheck.sh" /usr/local/sbin/report-parser-healthcheck
 install -m 0644 "$TMP_DIR/deploy/report-parser-healthcheck.service" /etc/systemd/system/report-parser-healthcheck.service
 install -m 0644 "$TMP_DIR/deploy/report-parser-healthcheck.timer" /etc/systemd/system/report-parser-healthcheck.timer
@@ -70,7 +46,44 @@ chmod 0750 /var/lib/report-parser-monitoring
 systemctl daemon-reload
 systemctl enable --now report-parser-healthcheck.timer
 
-systemctl restart "$SERVICE"
-systemctl is-active --quiet "$SERVICE"
+systemctl stop "$SERVICE" || true
+docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+start_container() {
+    local image="$1"
+    docker run -d --name "$CONTAINER" --restart unless-stopped --publish 8080:8080 \
+        --env HOST=0.0.0.0 --env PORT=8080 \
+        --env DATABASE_PATH=/app/data/gct_report_parser.db \
+        --env MAX_FILE_SIZE_MB="${MAX_FILE_SIZE_MB:-500}" \
+        --env MAX_REQUEST_SIZE_MB="${MAX_REQUEST_SIZE_MB:-1024}" \
+        --env MAX_ZIP_DEPTH="${MAX_ZIP_DEPTH:-20}" \
+        --env WEB_CONCURRENCY="${WEB_CONCURRENCY:-2}" \
+        --env GUNICORN_TIMEOUT="${GUNICORN_TIMEOUT:-900}" \
+        --volume "$APP_DIR/data:/app/data" "$image"
+}
+rollback() {
+    echo "Deployment failed; attempting rollback."
+    docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+    if [[ "$HAD_CONTAINER" -eq 1 && -n "$OLD_IMAGE" ]]; then
+        start_container "$OLD_IMAGE" || true
+    elif [[ "$SERVICE_WAS_ACTIVE" -eq 1 ]]; then
+        systemctl start "$SERVICE" || true
+    fi
+}
+if ! start_container "$IMAGE"; then
+    rollback
+    exit 7
+fi
 
-echo "Deployment completed: $APP_DIR"
+healthy=0
+for attempt in $(seq 1 20); do
+    if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:8080/healthz >/dev/null; then healthy=1; break; fi
+    sleep 3
+done
+if [[ "$healthy" -ne 1 ]]; then
+    docker logs --tail 80 "$CONTAINER" || true
+    rollback
+    exit 8
+fi
+
+echo "Docker deployment completed: image=$IMAGE container=$CONTAINER"
+docker ps --filter "name=$CONTAINER"
