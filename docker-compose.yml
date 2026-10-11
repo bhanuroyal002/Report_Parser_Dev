@@ -6,6 +6,9 @@ services:
     image: report-parser:local
     container_name: report-parser-container
     restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
     ports:
       - "8080:8080"
     environment:
