@@ -1,54 +1,78 @@
 # Report Parser
 
-A Python web application for parsing Android certification **Tradefed result ZIPs** and generating a unified release-readiness dashboard.
+A Flask-based web application for reviewing Android Tradefed certification ZIP archives and turning the embedded `test_result.xml` data into a single, human-readable dashboard.
 
-The tool is designed for Android automation and certification workflows where CTS, GTS, TVTS, STS, VTS, CTS-on-GSI and CTS Verifier reports need to be reviewed together.
+This tool is designed for Android certification workflows, where teams often receive multiple ZIP packages from CTS/GTS/TVTS/STS/VTS/Verifier jobs and need a quick way to group results, identify mismatches, and review failed test cases without manually opening every archive.
 
-## What it does
+## What the tool does
 
-- Upload one or more certification ZIP reports.
-- Recursively searches nested ZIP files for `test_result.xml`.
-- Detects suite and build information from Tradefed result data.
-- Groups reports by build fingerprint.
-- Stops aggregation when different builds are uploaded together.
-- Merges split reports and reruns.
-- **Rerun rule:** if the same testcase passes in any execution, the final state is PASS.
-- Shows build fingerprint, Android version, security patch, build ID, SDK, architecture and suite-to-build grouping.
-- Shows module completion and testcase counts.
-- Highlights incomplete modules.
-- Lists final failed testcases and failure details.
-- Generates the full stakeholder-style standalone HTML dashboard.
-- Supports View/Download for the current dashboard and every historical run.
-- Shows upload/XML diagnostics and safely ignores exact duplicate XML reports.
-- Stores the latest 20 successful analysis runs in a local SQLite database.
+- Upload one or more ZIP files.
+- Recursively inspect nested ZIP files.
+- Search for `test_result.xml` files.
+- Parse Tradefed result metadata and per-module/per-test-case data.
+- Merge repeated or split reports for the same build/suite.
+- Detect when inputs belong to different build fingerprints.
+- Save the latest successful analyses in SQLite.
+- Show a dashboard in the browser and allow download as standalone HTML.
 
-## Technology
+## Scope and assumptions
 
-This repository is now **100% Python for the application layer**.
+This is not a general-purpose XML parser. It is purpose-built around Tradefed `test_result.xml` output, including fields like:
+
+- suite information
+- module states
+- pass/fail/assumption-failure/ignored status
+- build fingerprint and security patch info
+- Android version and SDK metadata
+
+The parser intentionally avoids silently combining results from different builds. If multiple uploaded reports have different build fingerprints, the dashboard marks the run as a build mismatch and suppresses aggregate test metrics.
+
+## Repository layout
+
+```text
+Report_Parser/
+├── app.py                 # Flask app and routes
+├── parser.py              # ZIP/XML scan, parse, merge, and build validation logic
+├── history.py             # SQLite-based analysis history
+├── report_builder.py      # HTML dashboard renderer
+├── start.sh               # Local bootstrap and startup script
+├── Jenkinsfile            # CI/CD pipeline definition
+├── gunicorn.conf.py       # Gunicorn runtime settings
+├── requirements.txt        # Python dependencies
+├── .env.example           # Example environment configuration
+├── .gitignore
+├── templates/
+│   └── index.html         # Main web UI
+├── static/
+│   ├── app.js             # Front-end behavior
+│   └── style.css          # Styles for the dashboard and UI
+├── deploy/
+│   ├── install-server.sh  # Linux server provisioning script
+│   ├── report-parser-deploy.sh
+│   └── report-parser.service
+├── data/                  # Created at runtime for SQLite database
+└── README.md
+```
+
+## Technologies
 
 - Python 3.10+
-- Flask 3.1+
-- SQLite — built into Python
-- Python standard library for ZIP/XML/JSON/database processing
-- HTML/CSS/JavaScript frontend
+- Flask 3.x
+- Gunicorn
+- SQLite
+- HTML/CSS/JavaScript for the browser UI
 
 ## Requirements
-
-Install:
 
 - Python 3.10 or newer
 - Git
 - A modern browser
 
-No separate database server is required. SQLite is created automatically under:
+The app does not require a separate database server. SQLite is created automatically in the repository under `data/gct_report_parser.db` when the app runs.
 
-```text
-data/gct_report_parser.db
-```
+## Local quick start
 
-## Installation
-
-For a fresh Linux/WSL user, the application can now be started with **one command** after cloning:
+Clone and run:
 
 ```bash
 git clone https://github.com/bhanuroyal002/Report_Parser.git
@@ -56,280 +80,216 @@ cd Report_Parser
 ./start.sh
 ```
 
-`start.sh` automatically:
+`start.sh` will:
 
-1. Checks for Python 3.10 or newer.
-2. Creates the local `.venv` on the first run.
-3. Installs the dependencies from `requirements.txt`.
-4. Reuses the existing environment on later runs.
-5. Reinstalls dependencies automatically when `requirements.txt` changes.
-6. Starts the Flask application on `127.0.0.1:8080`.
+1. check for Python 3.10+
+2. create `.venv` if needed
+3. install dependencies from `requirements.txt`
+4. reuse the existing environment if already present
+5. start the app locally on `http://127.0.0.1:8080`
 
-The user does **not** need to manually create or activate the virtual environment or run `pip install`.
-
-Open:
-
-```text
-http://127.0.0.1:8080
-```
-
-For later starts, simply run:
+For later runs:
 
 ```bash
 ./start.sh
 ```
 
-Flask's development server is suitable for local development; do not use it as the production server. citeturn0search1turn0search2
+## Running directly
 
-## Team/server usage
-
-For the shared Linux server, the application should run as a persistent Gunicorn service. Teammates only need a browser and access to the corporate VPN.
-
-Then run Gunicorn on the server:
+If you want to run the Flask app manually:
 
 ```bash
-.venv/bin/gunicorn --workers 2 --bind 0.0.0.0:8080 app:app
+python app.py
 ```
 
-Teammates can then open:
+Or:
+
+```bash
+HOST=127.0.0.1 PORT=8080 python app.py
+```
+
+This is suitable for local development, but not for production deployment.
+
+## Production deployment
+
+For a shared server, the repository is set up to run using Gunicorn behind a systemd service.
+
+### 1. Provision the server
+
+```bash
+sudo bash deploy/install-server.sh
+```
+
+This script:
+
+- creates/updates the app directory under `/opt/report_parser`
+- clones or pulls the repo
+- creates a virtual environment
+- installs Python requirements
+- copies `.env.example` to `.env`
+- sets `HOST=0.0.0.0` and `PORT=8080`
+- installs the `report-parser.service` systemd unit
+- enables and starts the service
+
+### 2. Runtime service
+
+The service definition is installed at:
+
+```text
+/etc/systemd/system/report-parser.service
+```
+
+It runs the app with Gunicorn using the config in `gunicorn.conf.py`.
+
+### 3. Smoke check
+
+The app is expected to be reachable on:
 
 ```text
 http://<server-ip>:8080
 ```
 
-For this internal deployment, no application installation is required on team laptops. They only need to connect to the corporate VPN and use a browser.
+The Jenkins pipeline also runs a smoke test by curling `/` after deployment.
 
-For production, do not expose Flask's development server directly. Flask recommends a production WSGI server such as Gunicorn. citeturn0search1turn0search2
+## Configuration
 
-## Optional configuration
+The app reads configuration from environment variables. Example values are in `.env.example`:
 
-Copy:
-
-```bash
-cp .env.example .env
+```dotenv
+HOST=127.0.0.1
+PORT=8080
+DEBUG=false
+DATABASE_PATH=data/gct_report_parser.db
+MAX_FILE_SIZE_MB=500
+MAX_REQUEST_SIZE_MB=1024
+MAX_ZIP_DEPTH=20
 ```
 
-The application reads configuration from environment variables:
+### Meaning of the key settings
 
-| Variable | Default | Purpose |
-|---|---|---|
-| HOST | 127.0.0.1 | Listen address |
-| PORT | 8080 | Web port |
-| DEBUG | false | Flask debug mode |
-| DATABASE_PATH | data/gct_report_parser.db | SQLite database |
-| MAX_FILE_SIZE_MB | 500 | Maximum individual ZIP |
-| MAX_REQUEST_SIZE_MB | 1024 | Maximum upload request |
-| MAX_ZIP_DEPTH | 20 | Nested ZIP recursion limit |
+- `HOST`: bind address for Flask or Gunicorn
+- `PORT`: application port
+- `DEBUG`: enable Flask debug mode
+- `DATABASE_PATH`: SQLite database path
+- `MAX_FILE_SIZE_MB`: maximum size of an individual zip file upload
+- `MAX_REQUEST_SIZE_MB`: maximum size of the request payload
+- `MAX_ZIP_DEPTH`: maximum nested zip recursion depth
 
-The application does not require the `.env` file; environment variables can be exported directly.
+## Web app behavior
 
-## How to use
+When the app is running, the browser UI allows the user to:
 
-### Step 1 — Open the application
+- upload report ZIPs
+- start report analysis
+- view summary metrics
+- review incomplete modules
+- review failed test cases
+- view dashboard data and historical runs
+- download the generated HTML dashboard
 
-Open:
+## API endpoints
 
-```text
-http://127.0.0.1:8080
-```
+The app exposes a small set of JSON endpoints:
 
-### Step 2 — Upload reports
+- `GET /` — serves the main UI
+- `GET /api/dashboard` — returns the empty/default dashboard payload
+- `GET /api/history` — returns the last N analyses in SQLite
+- `GET /api/history/<run_id>` — returns a specific historical report by run ID
+- `POST /api/analyze` — accepts uploaded ZIP files and returns parsed dashboard data
+- `POST /api/publish` — accepts a dashboard JSON object and returns standalone HTML
 
-Select one or more ZIP files.
+## Result semantics and mismatch handling
 
-The ZIP filename does not determine the suite. The parser reads the Tradefed XML.
+The parser follows a practical certification workflow:
 
-### Step 3 — Analyze
+- results from the same build fingerprint are merged together
+- repeated executions of the same testcase reconcile using pass-priority logic
+- if a testcase passes in any execution, the final state is considered PASS
+- if reports contain multiple different build fingerprints, the tool flags this as a build mismatch
+- in that case, the overall pass/fail summary is intentionally suppressed to avoid misleading aggregate results
 
-Click:
+Examples of reconciliation behavior implemented in the parser:
 
-```text
-Analyze Reports →
-```
+- PASS + FAIL -> PASS
+- FAIL + PASS -> PASS
+- PASS + PASS -> PASS
+- FAIL + FAIL -> FAIL
 
-The application:
+## History and persistence
 
-1. Reads each ZIP.
-2. Searches nested archives.
-3. Finds `test_result.xml`.
-4. Extracts build metadata.
-5. Parses modules and testcases.
-6. Reconciles reruns.
-7. Builds the dashboard.
-8. Saves the successful analysis to SQLite.
+The app stores the most recent 20 successful analysis runs in SQLite. The history includes:
 
-### Step 4 — Check build identity
-
-The dashboard shows:
-
-- Build fingerprint
+- run ID
+- analysis timestamp
+- status
+- build fingerprint
 - Android version
-- Security patch
-- Build ID
-- SDK
-- Architecture
+- security patch
+- suite count
+- total tests
+- passed/failed counts
+- full dashboard JSON payload
 
-Reports with different build fingerprints are not merged for test metrics. The dashboard still records the individual build/suite information so the mismatch can be diagnosed.
-
-### Step 5 — Review results
-
-The dashboard shows:
-
-- Suite
-- Total modules
-- Completed modules
-- Incomplete modules
-- Passed tests
-- Failed tests
-- Assumption failures
-- Ignored tests
-- Total tests
-
-### Step 6 — Review failures
-
-Failed testcases are listed with:
-
-- Suite
-- Module
-- Testcase
-- Failure details
-
-### Step 7 — Publish
-
-Use:
-
-- **View Dashboard**
-- **Download Dashboard HTML**
-
-The generated dashboard is standalone HTML and can be shared independently.
-
-## Rerun reconciliation
-
-For repeated executions of the same testcase:
-
-```text
-PASS + FAIL  -> PASS
-FAIL + PASS  -> PASS
-PASS + PASS  -> PASS
-FAIL + FAIL  -> FAIL
-```
-
-This follows the existing certification workflow where reruns are used to recover failed testcases.
-
-## Build mismatch behavior
-
-If reports contain different fingerprints, the application displays:
-
-```text
-BUILD MISMATCH
-```
-
-Testcase/module metrics are intentionally suppressed to prevent results from different device builds from being silently combined.
-
-This prevents results from different device builds from being silently combined.
-
-## History
-
-The application stores the latest **20 successful analysis runs** in SQLite. A successful run means at least one Tradefed report was recognized; failed testcases and build-mismatch results are still valid analyses and are retained.
-
-The history contains:
-
-- Run ID
-- Analysis timestamp
-- Status
-- Build fingerprint
-- Android version
-- Security patch
-- Suite count
-- Test count
-- Passed count
-- Failed count
-- Complete dashboard JSON
-
-Uploaded ZIP files are **not** stored permanently.
-
-The database is created automatically:
+The database is stored in:
 
 ```text
 data/gct_report_parser.db
 ```
 
-Back up this file if historical analysis data needs to be preserved.
+The directory is auto-created if it does not exist.
 
-## Project structure
+## CI/CD
 
-```text
-Report_Parser/
-├── start.sh
-├── app.py
-├── parser.py
-├── history.py
-├── report_builder.py
-├── requirements.txt
-├── .env.example
-├── .gitignore
-├── templates/
-│   └── index.html
-├── static/
-│   ├── app.js
-│   └── style.css
-└── data/
-    └── gct_report_parser.db   # created automatically, ignored by Git
-```
+The included `Jenkinsfile` does the following:
 
-## Development
+1. checks out the repo
+2. verifies Python syntax and required files exist
+3. creates a CI virtualenv
+4. installs dependencies
+5. packages the repo into a tarball
+6. deploys via the server installer entrypoint
+7. smoke-tests the deployed app through HTTP
 
-Activate the virtual environment:
+## Known limitations
 
-```bash
-source .venv/bin/activate
-```
+- This parser is tuned for Tradefed `test_result.xml` content and may not correctly interpret completely different XML schemas.
+- It expects report ZIPs and nested ZIP archives to be valid and readable.
+- It is designed for internal/corporate deployment patterns; it does not include enterprise auth or RBAC.
+- Historical analysis should be treated as operational data, not an external system of record.
+- No license is currently specified for the repository.
 
-Start locally:
+## Troubleshooting
 
-```python
-python app.py
-```
+### App does not start
 
-Check syntax:
+Check Python version:
 
 ```bash
-python -m py_compile app.py parser.py history.py report_builder.py
+python3 --version
 ```
 
-## Production
-
-Do not run Flask's development server for a production deployment. Flask's documentation recommends using a production WSGI server such as Gunicorn instead. citeturn0search1turn0search2
-
-Example:
+Make sure the requirements are installed:
 
 ```bash
-gunicorn --workers 2 --bind 0.0.0.0:8080 app:app
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-For an internal team server, the recommended architecture is:
+### No reports recognized
 
-```text
-Team Laptop
-    |
-    | GlobalProtect VPN
-    v
-Corporate Network
-    |
-    v
-Linux Server (<server-ip>)
-    |
-    v
-Gunicorn :8080
-    |
-    v
-Flask Report Parser
-    |
-    +---- parser.py
-    +---- history.py
-    +---- SQLite
-```
+Verify that the uploaded ZIP contains a file ending in `test_result.xml` inside the archive or nested inside another ZIP.
+
+### Build mismatch warning
+
+This is expected behavior when different uploaded reports belong to different build fingerprints. This is treated as a data-quality issue, not a parser failure.
 
 ## License
 
 No license has been specified for this repository yet.
+
+## Summary
+
+This repository is a focused internal tool for parsing Android certification ZIP results and presenting them in a single dashboard. It is already structured for local execution, Linux server deployment, and CI/CD-based deployment, but it is still best understood as a specialized analysis workflow tool rather than a generic enterprise product.
+
+If you want, the next step would be to tighten the documentation around actual usage examples and add a proper sample dashboard screenshot or a sample report upload workflow.
