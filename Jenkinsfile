@@ -67,7 +67,11 @@ pipeline {
                         --exclude='./.ci-venv' \
                         --exclude='./data' \
                         --exclude='./.env' \
-                        --exclude='./__pycache__' \
+                        --exclude='__pycache__' \
+                        --exclude='*/__pycache__' \
+                        --exclude='*/__pycache__/*' \
+                        --exclude='*.pyc' \
+                        --exclude='*.pyo' \
                         --exclude='./.pytest_cache' \
                         --exclude='./report-parser-*.tar.gz' \
                         -C "$WORKSPACE" .
