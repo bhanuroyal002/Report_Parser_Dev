@@ -14,8 +14,10 @@ from report_builder import build_dashboard_html
 
 BASE = Path(__file__).resolve().parent
 DB = os.getenv("DATABASE_PATH", str(BASE / "data" / "gct_report_parser.db"))
-MAX_FILE = int(os.getenv("MAX_FILE_SIZE_MB", "500")) * 1024 * 1024
-MAX_REQUEST = int(os.getenv("MAX_REQUEST_SIZE_MB", "1024")) * 1024 * 1024
+MAX_FILE_MB = max(0, int(os.getenv("MAX_FILE_SIZE_MB", "0")))
+MAX_FILE = MAX_FILE_MB * 1024 * 1024 if MAX_FILE_MB else 0
+MAX_REQUEST_MB = max(0, int(os.getenv("MAX_REQUEST_SIZE_MB", "0")))
+MAX_REQUEST = MAX_REQUEST_MB * 1024 * 1024 if MAX_REQUEST_MB else None
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST
 history = HistoryStore(DB)
@@ -221,15 +223,16 @@ def analyze():
                     # Read at most one byte beyond the configured limit so
                     # oversized uploads are rejected without copying the
                     # entire file to the application's temporary directory.
-                    chunk = uploaded.stream.read(min(1024 * 1024, MAX_FILE - written + 1))
+                    chunk_size = 1024 * 1024 if not MAX_FILE else min(1024 * 1024, MAX_FILE - written + 1)
+                    chunk = uploaded.stream.read(chunk_size)
                     if not chunk:
                         break
                     written += len(chunk)
-                    if written > MAX_FILE:
+                    if MAX_FILE and written > MAX_FILE:
                         return jsonify({
                             "error": (
-                                f"{uploaded.filename} exceeds the "
-                                f"{MAX_FILE // 1048576} MB file limit."
+                                f"{uploaded.filename} exceeds the configured "
+                                f"{MAX_FILE_MB} MB file limit."
                             )
                         }), 413
                     output.write(chunk)
@@ -276,7 +279,7 @@ def publish():
 @app.errorhandler(413)
 def too_large(_):
     return jsonify({
-        "error": "Upload is too large. The total request limit is 1 GB."
+        "error": "Upload is too large for the configured server or proxy limit. Increase that limit and retry."
     }), 413
 
 
