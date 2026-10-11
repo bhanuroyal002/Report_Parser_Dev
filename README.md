@@ -35,11 +35,11 @@ GCT Insight is a Flask web application that parses Android Tradefed certificatio
 
 ```text
 Report_Parser/
-├── app.py                         # Flask routes, upload handling, feedback, health check
+├── app.py                         # Flask routes, upload handling, health check
 ├── parser.py                      # ZIP discovery, XML parsing, merge and build validation
 ├── history.py                     # SQLite history storage
 ├── report_builder.py              # Standalone HTML report generation
-├── templates/                     # Main UI and feedback page
+├── templates/                     # Main dashboard UI
 ├── static/                        # Browser JavaScript and CSS
 ├── tests/                         # Parser and application regression tests
 ├── deploy/
