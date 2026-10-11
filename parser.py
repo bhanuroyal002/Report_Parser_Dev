@@ -288,78 +288,83 @@ def parse_tradefed_xml(data, source):
     }
 
 
-def scan_bytes(data, source, depth, seen_xml, seen_zip):
+def scan_archive(archive, source, depth, seen_xml, seen_zip):
     if depth > MAX_DEPTH:
         return [], 0, [f"{source}: maximum nested ZIP depth reached ({MAX_DEPTH})."]
-
-    try:
-        archive = zipfile.ZipFile(io.BytesIO(data))
-    except zipfile.BadZipFile as exc:
-        return [], 0, [f"{source}: invalid ZIP ({exc})"]
 
     reports = []
     xml_found = 0
     errors = []
 
-    with archive:
-        for entry in archive.infolist():
-            if entry.is_dir():
-                continue
-            name = entry.filename
-            lower = name.lower()
+    for entry in archive.infolist():
+        if entry.is_dir():
+            continue
+        name = entry.filename
+        lower = name.lower()
+        is_result_xml = lower.endswith("test_result.xml")
+        is_nested_zip = lower.endswith(".zip")
+        if not (is_result_xml or is_nested_zip):
+            continue
 
-            # Tradefed ZIPs often contain large logs, screenshots, media and
-            # other artifacts that are irrelevant to dashboard generation.
-            # Do not decompress/read those entries: only XML results and
-            # nested ZIP archives can contribute to the analysis.
-            is_result_xml = lower.endswith("test_result.xml")
-            is_nested_zip = lower.endswith(".zip")
-            if not (is_result_xml or is_nested_zip):
-                continue
+        try:
+            payload = archive.read(entry)
+        except (OSError, RuntimeError, zipfile.BadZipFile) as exc:
+            errors.append(f"{source}!{name}: unable to read ZIP entry ({exc})")
+            continue
 
+        if is_result_xml:
+            xml_found += 1
+            digest = hashlib.sha256(payload).hexdigest()
+            if digest not in seen_xml:
+                seen_xml.add(digest)
+                try:
+                    report = parse_tradefed_xml(payload, f"{source}!{name}")
+                    if report is not None:
+                        reports.append(report)
+                    else:
+                        errors.append(f"{source}!{name}: suite name/plan was not detected.")
+                except (ET.ParseError, UnicodeError, ValueError) as exc:
+                    errors.append(f"{source}!{name}: XML parse error ({exc})")
+
+        if is_nested_zip:
+            digest = hashlib.sha256(payload).hexdigest()
+            if digest in seen_zip:
+                continue
+            seen_zip.add(digest)
             try:
-                payload = archive.read(entry)
-            except (OSError, RuntimeError, zipfile.BadZipFile) as exc:
-                errors.append(f"{source}!{name}: unable to read ZIP entry ({exc})")
+                with zipfile.ZipFile(io.BytesIO(payload)) as nested_archive:
+                    nested, found, nested_errors = scan_archive(
+                        nested_archive, f"{source}!{name}", depth + 1, seen_xml, seen_zip
+                    )
+            except zipfile.BadZipFile as exc:
+                errors.append(f"{source}!{name}: invalid nested ZIP ({exc})")
                 continue
-
-            if is_result_xml:
-                xml_found += 1
-                digest = hashlib.sha256(payload).hexdigest()
-                if digest not in seen_xml:
-                    seen_xml.add(digest)
-                    try:
-                        report = parse_tradefed_xml(payload, f"{source}!{name}")
-                        if report is not None:
-                            reports.append(report)
-                        else:
-                            errors.append(f"{source}!{name}: suite name/plan was not detected.")
-                    except (ET.ParseError, UnicodeError, ValueError) as exc:
-                        errors.append(f"{source}!{name}: XML parse error ({exc})")
-
-            if lower.endswith(".zip"):
-                digest = hashlib.sha256(payload).hexdigest()
-                if digest in seen_zip:
-                    continue
-                seen_zip.add(digest)
-                nested, found, nested_errors = scan_bytes(
-                    payload, f"{source}!{name}", depth + 1, seen_xml, seen_zip
-                )
-                reports.extend(nested)
-                xml_found += found
-                errors.extend(nested_errors)
+            reports.extend(nested)
+            xml_found += found
+            errors.extend(nested_errors)
 
     return reports, xml_found, errors
 
 
-def scan(path, name, seen_xml, seen_zip):
+def scan_bytes(data, source, depth, seen_xml, seen_zip):
     try:
-        with open(path, "rb") as handle:
-            data = handle.read()
-        return scan_bytes(data, name, 0, seen_xml, seen_zip)
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            return scan_archive(archive, source, depth, seen_xml, seen_zip)
+    except zipfile.BadZipFile as exc:
+        return [], 0, [f"{source}: invalid ZIP ({exc})"]
+
+
+def scan(path, name, seen_xml, seen_zip):
+    # Open the outer ZIP directly from disk instead of loading the entire
+    # archive into RAM first. This avoids an extra full-file memory copy for
+    # large certification reports; nested ZIPs are read only when encountered.
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return scan_archive(archive, name, 0, seen_xml, seen_zip)
+    except zipfile.BadZipFile as exc:
+        return [], 0, [f"{name}: invalid ZIP ({exc})"]
     except OSError as exc:
         return [], 0, [f"{name}: {exc}"]
-
 
 def merge_reports(reports):
     if not reports:
