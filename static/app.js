@@ -81,7 +81,23 @@ function render(){
   $("failureList").innerHTML=fail.length?fail.map(x=>`<div class="issue-row"><strong>${esc(x.suite)} · ${esc(x.module)} · ${esc(x.testCase)}</strong></div>`).join(""):"<div class='empty'>No failures detected.</div>";
   $("publishBtn").disabled=false;$("viewBtn").disabled=false;
 }
-$("reportFiles").addEventListener("change",e=>{state.files=[...e.target.files];renderFiles()});
+$("reportFiles").addEventListener("change",e=>{
+  // Keep previously selected files when the user adds files in later selections.
+  // De-duplicate by name, size and lastModified, since browsers expose a fresh
+  // FileList for each selection and the input itself is not a persistent queue.
+  const incoming=[...e.target.files];
+  const key=f=>`${f.name}::${f.size}::${f.lastModified}`;
+  const existing=new Set(state.files.map(key));
+  for(const file of incoming){
+    if(!existing.has(key(file))){
+      state.files.push(file);
+      existing.add(key(file));
+    }
+  }
+  // Reset the native input so selecting the same file again still fires change.
+  e.target.value="";
+  renderFiles();
+});
 $("clearBtn").addEventListener("click",()=>{
   state.files=[];state.data=null;$("reportFiles").value="";renderFiles();
 loadHistory();$("publishBtn").disabled=true;$("viewBtn").disabled=true;
