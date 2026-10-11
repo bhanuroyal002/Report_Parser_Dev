@@ -62,8 +62,13 @@ fi
 
 chown -R reportparser:reportparser "$APP_DIR"
 install -m 0644 deploy/report-parser.service /etc/systemd/system/report-parser.service
+install -m 0755 deploy/report-parser-healthcheck.sh /usr/local/sbin/report-parser-healthcheck
+install -m 0644 deploy/report-parser-healthcheck.service /etc/systemd/system/report-parser-healthcheck.service
+install -m 0644 deploy/report-parser-healthcheck.timer /etc/systemd/system/report-parser-healthcheck.timer
+mkdir -p /var/lib/report-parser-monitoring
+chmod 0750 /var/lib/report-parser-monitoring
 systemctl daemon-reload
-systemctl enable --now "$SERVICE"
+systemctl enable --now "$SERVICE" report-parser-healthcheck.timer
 
 systemctl --no-pager --full status "$SERVICE" || true
 
