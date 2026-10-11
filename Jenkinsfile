@@ -3,14 +3,11 @@ def notifyReportParserWebhook(String status) {
         echo 'Webhook not configured; skipping external deployment notification.'
         return
     }
-
     withEnv(["REPORT_PARSER_NOTIFY_STATUS=" + status]) {
         sh '''
             set +x
             payload="$(python3 -c 'import json, os; s=os.environ["REPORT_PARSER_NOTIFY_STATUS"]; print(json.dumps({"text": "Report Parser deployment " + s + ": " + os.environ.get("JOB_NAME", "Jenkins job") + " #" + os.environ.get("BUILD_NUMBER", ""), "status": s, "job": os.environ.get("JOB_NAME", ""), "buildNumber": os.environ.get("BUILD_NUMBER", ""), "buildUrl": os.environ.get("BUILD_URL", "")}))')"
-            if ! curl --silent --show-error --fail --max-time 8 \
-                -H 'Content-Type: application/json' \
-                --data-binary "$payload" "$REPORT_PARSER_WEBHOOK_URL"; then
+            if ! curl --silent --show-error --fail --max-time 8 -H 'Content-Type: application/json' --data-binary "$payload" "$REPORT_PARSER_WEBHOOK_URL"; then
                 echo "WARNING: webhook notification failed; Jenkins build status is unchanged."
             fi
         '''
@@ -19,28 +16,22 @@ def notifyReportParserWebhook(String status) {
 
 pipeline {
     agent any
-
     options {
         timestamps()
         disableConcurrentBuilds()
         buildDiscarder(logRotator(numToKeepStr: '10', artifactNumToKeepStr: '5'))
         timeout(time: 30, unit: 'MINUTES')
     }
-
     environment {
         APP_DIR = '/opt/report_parser'
         SERVICE_NAME = 'report-parser'
         APP_URL = 'http://127.0.0.1:8080'
         ARTIFACT = "report-parser-${BUILD_NUMBER}.tar.gz"
     }
-
     stages {
         stage('Checkout') {
-            steps {
-                checkout scm
-            }
+            steps { checkout scm }
         }
-
         stage('Validate') {
             steps {
                 sh '''
@@ -49,32 +40,20 @@ pipeline {
                     python3 -m py_compile app.py parser.py history.py report_builder.py
                     bash -n deploy/install-server.sh deploy/report-parser-deploy.sh deploy/report-parser-healthcheck.sh
                     test -f requirements.txt
+                    test -f Dockerfile
+                    test -f docker-compose.yml
+                    test -f .dockerignore
                     test -f gunicorn.conf.py
                     test -f deploy/report-parser-healthcheck.service
                     test -f deploy/report-parser-healthcheck.timer
+                    echo "Validation passed; Python dependencies are installed in the Docker image, not on Jenkins."
                 '''
             }
         }
-
-        stage('Build') {
-            steps {
-                sh '''
-                    set -eux
-                    rm -rf .ci-venv
-                    python3 -m venv .ci-venv
-                    .ci-venv/bin/python -m pip install --upgrade pip
-                    .ci-venv/bin/pip install -r requirements.txt
-                    .ci-venv/bin/pip check
-                '''
-            }
-        }
-
         stage('Package') {
             steps {
                 sh '''
                     set -eux
-                    # Write the archive outside the directory being archived.
-                    # Creating it in WORKSPACE changes the root directory mtime while tar reads it.
                     PACKAGE_TMP="$WORKSPACE@tmp/$ARTIFACT"
                     mkdir -p "$WORKSPACE@tmp"
                     rm -f "$PACKAGE_TMP" "$ARTIFACT"
@@ -98,7 +77,6 @@ pipeline {
                 archiveArtifacts artifacts: "${ARTIFACT}", fingerprint: true, onlyIfSuccessful: true
             }
         }
-
         stage('Deploy') {
             steps {
                 sh '''
@@ -107,34 +85,31 @@ pipeline {
                 '''
             }
         }
-
         stage('Smoke Test') {
             steps {
                 sh '''
                     set -eux
                     for attempt in 1 2 3 4 5 6 7 8 9 10; do
-                        if curl --fail --silent --show-error "$APP_URL/healthz" >/dev/null && \
-                           curl --fail --silent --show-error "$APP_URL/" >/dev/null; then
+                        if curl --fail --silent --show-error "$APP_URL/healthz" >/dev/null && curl --fail --silent --show-error "$APP_URL/" >/dev/null; then
                             echo "Report Parser health endpoint and home page are healthy."
                             exit 0
                         fi
                         sleep 2
                     done
                     echo "Report Parser health check failed."
-                    sudo systemctl --no-pager --full status "$SERVICE_NAME" || true
+                    sudo docker logs --tail 80 report-parser-container || true
                     exit 1
                 '''
             }
         }
     }
-
     post {
         success {
-            echo 'Report Parser deployment completed successfully.'
+            echo 'Report Parser Docker deployment completed successfully.'
             script { notifyReportParserWebhook('SUCCESS') }
         }
         failure {
-            echo 'Report Parser deployment failed. Check the failed stage and service logs.'
+            echo 'Report Parser Docker deployment failed. Check the failed stage and service logs.'
             script { notifyReportParserWebhook('FAILURE') }
         }
     }
