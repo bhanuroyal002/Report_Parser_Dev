@@ -49,16 +49,16 @@ function render(){
   // present test-case/module counts from mixed builds.
   const statsEl=$("stats");
   const suiteEl=$("suiteGrid");
-  const issuesEl=document.querySelector(".issues-grid");
+  const issuesEl=$("issuesGrid");
   if(fingerprintMismatch){
     statsEl.innerHTML="";
     suiteEl.innerHTML="";
-    if(issuesEl) issuesEl.style.display="none";
+    if(issuesEl) issuesEl.classList.add("hidden");
     $("publishBtn").disabled=false;
     $("viewBtn").disabled=false;
     return;
   }
-  if(issuesEl) issuesEl.style.display="grid";
+  if(issuesEl) issuesEl.classList.remove("hidden");
   $("readiness").textContent=fingerprintMismatch?"BUILD MISMATCH":(ready?"READY FOR REVIEW":"ATTENTION REQUIRED");
   $("readiness").className="readiness-chip "+(ready?"ready":"attention");
   const rate=((Number(o.passed||0)/Math.max(1,Number(o.totalTests||0)))*100).toFixed(1);
