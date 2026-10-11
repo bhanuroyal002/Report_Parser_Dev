@@ -40,10 +40,10 @@
   <section class="feedback-card">
     <span class="section-kicker">YOUR VOICE MATTERS</span>
     <h1>Help us make it <em>better.</em></h1>
-    <p class="feedback-intro">Share a suggestion, report a problem, or tell us what would make GCT Insight more useful. Your message goes directly to the tool administrators.</p>
+    <p class="feedback-intro">Share a suggestion, report a problem, or tell us what would make GCT Insight more useful. Your feedback is saved and an email notification is queued for the tool administrators.</p>
     <form id="feedbackForm" class="feedback-form">
       <div class="feedback-field"><label for="name">Name <span>(optional)</span></label><input id="name" name="name" autocomplete="name" maxlength="120" placeholder="Your name"></div>
-      <div class="feedback-field"><label for="email">Email for a reply <span>(optional)</span></label><input id="email" name="email" type="email" autocomplete="email" maxlength="254" placeholder="you@company.com"></div>
+      <div class="feedback-field"><label for="email">Email address <span>(required)</span></label><input id="email" name="email" type="email" autocomplete="email" maxlength="254" placeholder="you@company.com" required></div>
       <div class="feedback-field"><label for="category">Feedback type</label><select id="category" name="category"><option>Suggestion</option><option>Bug report</option><option>Usability improvement</option><option>Feature request</option><option>General feedback</option></select></div>
       <div class="feedback-field"><label for="subject">Subject <span>(optional)</span></label><input id="subject" name="subject" maxlength="160" placeholder="A short summary"></div>
       <div class="feedback-field full"><label for="message">Your feedback <span aria-hidden="true">*</span></label><textarea id="message" name="message" required maxlength="10000" placeholder="Tell us what happened or what you'd like to see..."></textarea></div>
