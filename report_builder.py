@@ -111,7 +111,7 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em}.subtitle{margin-top:7px;color:
         return "".join(out)
 
     out.append("<section class='section'><div class='title'>Suite summary</div><div class='table-wrap'><table>"
-               "<thead><tr><th>Suite</th><th>Mods</th><th>Done</th><th>Inc</th><th>Passed</th><th>Failed</th>"
+               "<thead><tr><th>Suite</th><th>Mods</th><th>Done</th><th>Incomplete Modules</th><th>Passed</th><th>Failed</th>"
                "<th>Assumption Failure</th><th>Ignored</th><th>Warnings</th><th>Total Tests</th></tr></thead><tbody>")
 
     for suite in suites:
