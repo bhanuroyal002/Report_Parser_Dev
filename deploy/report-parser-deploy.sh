@@ -36,7 +36,7 @@ trap cleanup EXIT
 
 tar -xzf "$ARTIFACT" -C "$TMP_DIR"
 
-for required in app.py parser.py history.py report_builder.py requirements.txt gunicorn.conf.py; do
+for required in app.py parser.py history.py report_builder.py requirements.txt gunicorn.conf.py deploy/report-parser-healthcheck.sh deploy/report-parser-healthcheck.service deploy/report-parser-healthcheck.timer; do
     if [[ ! -f "$TMP_DIR/$required" ]]; then
         echo "ERROR: deployment artifact is missing $required"
         exit 5
