@@ -293,3 +293,14 @@ No license has been specified for this repository yet.
 This repository is a focused internal tool for parsing Android certification ZIP results and presenting them in a single dashboard. It is already structured for local execution, Linux server deployment, and CI/CD-based deployment, but it is still best understood as a specialized analysis workflow tool rather than a generic enterprise product.
 
 If you want, the next step would be to tighten the documentation around actual usage examples and add a proper sample dashboard screenshot or a sample report upload workflow.
+
+
+## Health monitoring and notifications
+
+- `GET /healthz` checks that the web application can respond and that its SQLite database accepts a simple query. It returns HTTP 200 with `{"status":"healthy","database":"ok"}` when healthy and HTTP 503 when the database check fails.
+- Jenkins checks both `/healthz` and the home page after each deployment.
+- A systemd timer runs a health check every five minutes. It records the last health state and only sends a notification when the app first appears unhealthy or changes between healthy and unhealthy, avoiding repeated alerts every five minutes.
+- Jenkins can send a JSON webhook notification for successful and failed deployments. Set `REPORT_PARSER_WEBHOOK_URL` as a Jenkins environment variable to enable it. The webhook receives `text`, `status`, `job`, `buildNumber`, and `buildUrl` fields. Notification failures are warnings and do not change the deployment result.
+- For periodic application health alerts, optionally create `/etc/report-parser-monitoring.env` as root with `REPORT_PARSER_WEBHOOK_URL=https://your-webhook-endpoint`, then set permissions to `chmod 600 /etc/report-parser-monitoring.env`. The systemd health-check service reads this file if it exists. The endpoint must accept a JSON object with a `text` field.
+
+The timer and health-check units are installed by the server installer and by subsequent Jenkins deployments.
