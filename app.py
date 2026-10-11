@@ -1,7 +1,10 @@
 import os
+import smtplib
 import sqlite3
+import ssl
 import tempfile
 from datetime import datetime, timezone
+from email.message import EmailMessage
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, Response
@@ -13,10 +16,66 @@ BASE = Path(__file__).resolve().parent
 DB = os.getenv("DATABASE_PATH", str(BASE / "data" / "gct_report_parser.db"))
 MAX_FILE = int(os.getenv("MAX_FILE_SIZE_MB", "500")) * 1024 * 1024
 MAX_REQUEST = int(os.getenv("MAX_REQUEST_SIZE_MB", "1024")) * 1024 * 1024
+FEEDBACK_RECIPIENTS = [
+    address.strip()
+    for address in os.getenv(
+        "FEEDBACK_TO_EMAILS",
+        "bhanuprakash.narla1@vantiva.com,bhanuprakash.narla@gmail.com",
+    ).split(",")
+    if address.strip()
+]
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST
 history = HistoryStore(DB)
+
+
+def send_feedback_notification(*, feedback_id, submitted_at, name, email,
+                               category, subject, message):
+    """Send a notification using SMTP settings injected at deployment time."""
+    host = os.getenv("SMTP_HOST", "").strip()
+    if not host:
+        raise RuntimeError("Feedback email is not configured: SMTP_HOST is missing")
+
+    port = int(os.getenv("SMTP_PORT", "587"))
+    username = os.getenv("SMTP_USER", "").strip()
+    password = os.getenv("SMTP_PASSWORD", "")
+    sender = os.getenv("FEEDBACK_FROM_EMAIL", "").strip() or username
+    if not sender:
+        raise RuntimeError(
+            "Feedback email is not configured: FEEDBACK_FROM_EMAIL or SMTP_USER is required"
+        )
+    if not FEEDBACK_RECIPIENTS:
+        raise RuntimeError("Feedback email is not configured: no recipients are set")
+
+    mail = EmailMessage()
+    mail["Subject"] = f"[GCT Insight Feedback] {category}: {subject or 'New feedback'}"
+    mail["From"] = sender
+    mail["To"] = ", ".join(FEEDBACK_RECIPIENTS)
+    mail.set_content(
+        "A user submitted feedback to GCT Insight.\n\n"
+        f"Feedback ID: {feedback_id}\n"
+        f"Submitted at (UTC): {submitted_at}\n"
+        f"Name: {name or 'Not provided'}\n"
+        f"Reply email: {email or 'Not provided'}\n"
+        f"Category: {category}\n"
+        f"Subject: {subject or 'Not provided'}\n\n"
+        "Feedback message:\n"
+        f"{message}\n"
+    )
+
+    context = ssl.create_default_context()
+    with smtplib.SMTP(host, port, timeout=15) as smtp:
+        smtp.ehlo()
+        if port in (465,):
+            # Port 465 expects implicit TLS; handled by SMTP_SSL below instead.
+            raise RuntimeError("Use SMTP_PORT=587 with STARTTLS for this configuration")
+        if smtp.has_extn("starttls"):
+            smtp.starttls(context=context)
+            smtp.ehlo()
+        if username:
+            smtp.login(username, password)
+        smtp.send_message(mail)
 
 
 @app.get("/")
@@ -43,8 +102,8 @@ def submit_feedback():
     if email and ("\n" in email or "\r" in email or "@" not in email):
         return jsonify({"error": "Enter a valid email address or leave it blank."}), 400
 
-    # Persist feedback in the same host-mounted SQLite database used by the app.
-    # This does not require an SMTP server or expose administrator email addresses.
+    submitted_at = datetime.now(timezone.utc).isoformat()
+    feedback_id = None
     try:
         with sqlite3.connect(DB, timeout=10) as connection:
             connection.execute("""
@@ -59,21 +118,46 @@ def submit_feedback():
                     status TEXT NOT NULL DEFAULT 'NEW'
                 )
             """)
-            connection.execute("""
+            cursor = connection.execute("""
                 INSERT INTO user_feedback
                     (submitted_at, name, reply_email, category, subject, message)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                datetime.now(timezone.utc).isoformat(),
-                name, email, category, subject, message
-            ))
+            """, (submitted_at, name, email, category, subject, message))
+            feedback_id = cursor.lastrowid
     except sqlite3.Error:
         app.logger.exception("Could not store user feedback")
         return jsonify({"error": "We couldn't save your feedback right now. Please try again later."}), 500
 
-    return jsonify({
-        "message": "Thank you! Your feedback has been saved for the app administrator."
-    }), 200
+    # Save first, then notify. A mail outage must never discard user feedback.
+    try:
+        send_feedback_notification(
+            feedback_id=feedback_id,
+            submitted_at=submitted_at,
+            name=name,
+            email=email,
+            category=category,
+            subject=subject,
+            message=message,
+        )
+        with sqlite3.connect(DB, timeout=10) as connection:
+            connection.execute(
+                "UPDATE user_feedback SET status = 'EMAILED' WHERE id = ?",
+                (feedback_id,),
+            )
+        return jsonify({
+            "message": "Thank you! Your feedback was saved and the app administrator has been notified."
+        }), 200
+    except Exception:
+        app.logger.exception("Feedback %s was saved, but email notification failed", feedback_id)
+        with sqlite3.connect(DB, timeout=10) as connection:
+            connection.execute(
+                "UPDATE user_feedback SET status = 'EMAIL_FAILED' WHERE id = ?",
+                (feedback_id,),
+            )
+        return jsonify({
+            "message": "Your feedback was saved, but the email notification could not be sent. Please try again later.",
+            "notificationSent": False,
+        }), 202
 
 
 @app.get("/healthz")
