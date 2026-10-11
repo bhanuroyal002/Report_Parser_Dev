@@ -306,14 +306,24 @@ def scan_bytes(data, source, depth, seen_xml, seen_zip):
             if entry.is_dir():
                 continue
             name = entry.filename
+            lower = name.lower()
+
+            # Tradefed ZIPs often contain large logs, screenshots, media and
+            # other artifacts that are irrelevant to dashboard generation.
+            # Do not decompress/read those entries: only XML results and
+            # nested ZIP archives can contribute to the analysis.
+            is_result_xml = lower.endswith("test_result.xml")
+            is_nested_zip = lower.endswith(".zip")
+            if not (is_result_xml or is_nested_zip):
+                continue
+
             try:
                 payload = archive.read(entry)
-            except OSError as exc:
+            except (OSError, RuntimeError, zipfile.BadZipFile) as exc:
                 errors.append(f"{source}!{name}: unable to read ZIP entry ({exc})")
                 continue
 
-            lower = name.lower()
-            if lower.endswith("test_result.xml"):
+            if is_result_xml:
                 xml_found += 1
                 digest = hashlib.sha256(payload).hexdigest()
                 if digest not in seen_xml:
