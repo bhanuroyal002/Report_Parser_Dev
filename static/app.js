@@ -67,18 +67,19 @@ function render(){
     ["FAILED",format(o.failed),"Failed test cases","fail"],
     ["ASSUMPTION FAILURE",format(o.assumptionFailures),"Assumption failures","warn"],
     ["IGNORED",format(o.ignored),"Ignored test cases","warn"],
+    ["WARNINGS",format(o.warnings),"Tradefed warnings","warn"],
     ["TOTAL TESTS",format(o.totalTests),rate+"% pass rate","total"]
   ].map(x=>`<div class="stat ${x[3]}"><span>${x[0]}</span><strong>${x[1]}</strong><small>${x[2]}</small></div>`).join("");
 
   $("suiteGrid").innerHTML=s.map(x=>{
     const p=x.modules?Math.round(x.completedModules/x.modules*100):0;
-    return `<article class="suite"><div class="suite-top"><div class="suite-title"><h3>${esc(x.name)}</h3></div><span class="pill ${x.status==="COMPLETED"?"ok":"warn"}">${esc(x.status)}</span></div><div class="suite-number">${format(x.completedModules)} / ${format(x.modules)} modules</div><div class="progress"><i style="width:${p}%"></i></div><div class="suite-meta"><span>${p}% complete</span><span>${format(x.testCases)} total tests</span></div><div class="suite-fails"><span class="good">${format(x.passed)} passed</span> · <span class="bad">${format(x.failed)} failed</span> · ${format(x.assumptionFailures)} assumption failure · ${format(x.ignored)} ignored</div></article>`;
+    return `<article class="suite"><div class="suite-top"><div class="suite-title"><h3>${esc(x.name)}</h3></div><span class="pill ${x.status==="COMPLETED"?"ok":"warn"}">${esc(x.status)}</span></div><div class="suite-number">${format(x.completedModules)} / ${format(x.modules)} modules</div><div class="progress"><i style="width:${p}%"></i></div><div class="suite-meta"><span>${p}% complete</span><span>${format(x.testCases)} total tests</span></div><div class="suite-fails"><span class="good">${format(x.passed)} passed</span> · <span class="bad">${format(x.failed)} failed</span> · ${format(x.assumptionFailures)} assumption failure · ${format(x.ignored)} ignored · ${format(x.warnings)} warnings</div></article>`;
   }).join("");
 
   $("incompleteCount").textContent=inc.length;
   $("failureCount").textContent=fail.length;
-  $("incompleteList").innerHTML=inc.length?inc.map(x=>`<div class="issue-row"><strong>${esc(x.suite)} · ${esc(x.module)}</strong></div>`).join(""):"<div class='empty'>No incomplete modules.</div>";
-  $("failureList").innerHTML=fail.length?fail.map(x=>`<div class="issue-row"><strong>${esc(x.suite)} · ${esc(x.module)} · ${esc(x.testCase)}</strong></div>`).join(""):"<div class='empty'>No failures detected.</div>";
+  $("incompleteList").innerHTML=inc.length?inc.map(x=>`<div class="issue-row"><strong>${esc(x.suite)} · ${esc(x.module)}</strong><small>${esc(x.reason||"Module incomplete")}</small></div>`).join(""):"<div class='empty'>No incomplete modules.</div>";
+  $("failureList").innerHTML=fail.length?fail.map(x=>`<div class="issue-row"><strong>${esc(x.suite)} · ${esc(x.module)} · ${esc(x.testCase)}</strong><small>${esc(x.details||"No failure details recorded.")}</small></div>`).join(""):"<div class='empty'>No failures detected.</div>";
   $("publishBtn").disabled=false;$("viewBtn").disabled=false;
 }
 $("reportFiles").addEventListener("change",e=>{
