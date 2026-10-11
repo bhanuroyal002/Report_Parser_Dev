@@ -47,8 +47,11 @@ pipeline {
                     set -eux
                     python3 --version
                     python3 -m py_compile app.py parser.py history.py report_builder.py
+                    bash -n deploy/install-server.sh deploy/report-parser-deploy.sh deploy/report-parser-healthcheck.sh
                     test -f requirements.txt
                     test -f gunicorn.conf.py
+                    test -f deploy/report-parser-healthcheck.service
+                    test -f deploy/report-parser-healthcheck.timer
                 '''
             }
         }
