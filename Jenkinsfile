@@ -51,14 +51,18 @@ pipeline {
             steps {
                 sh '''
                     set -eux
-                    rm -f "$ARTIFACT"
-                    tar -czf "$ARTIFACT" \
-                        --exclude=.git \
-                        --exclude=.venv \
-                        --exclude=.ci-venv \
-                        --exclude=data \
-                        --exclude=.env \
-                        .
+                    # Write the archive outside the directory being archived.
+                    # Creating it in WORKSPACE changes the root directory mtime while tar reads it.
+                    PACKAGE_TMP="$WORKSPACE@tmp/$ARTIFACT"
+                    rm -f "$PACKAGE_TMP" "$ARTIFACT"
+                    tar -czf "$PACKAGE_TMP" \
+                        --exclude='./.git' \
+                        --exclude='./.venv' \
+                        --exclude='./.ci-venv' \
+                        --exclude='./data' \
+                        --exclude='./.env' \
+                        -C "$WORKSPACE" .
+                    cp "$PACKAGE_TMP" "$WORKSPACE/$ARTIFACT"
                     tar -tzf "$ARTIFACT" | head -40
                 '''
                 archiveArtifacts artifacts: "${ARTIFACT}", fingerprint: true, onlyIfSuccessful: true
