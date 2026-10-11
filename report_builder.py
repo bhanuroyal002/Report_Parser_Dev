@@ -68,6 +68,9 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em}.subtitle{margin-top:7px;color:
 .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:9px}table{width:100%;border-collapse:collapse;background:#fff}th{background:linear-gradient(90deg,#eaf2ff,#f2edff);text-align:left;font-size:10px;text-transform:uppercase;color:#475467;padding:12px;white-space:nowrap}td{padding:12px;border-bottom:1px solid #edf0f5}tbody tr:nth-child(even){background:#fafcff}.pass-text{color:var(--green);font-weight:900}.fail-text{color:var(--red);font-weight:900}.inc-text{color:var(--amber);font-weight:900}
 .issue{padding:13px 14px;margin:8px 0;border:1px solid #e5eaf2;border-left:4px solid var(--red);border-radius:8px;background:#fffafa}.issue strong{display:block;line-height:1.45}.issue span{display:block;color:var(--muted);margin-top:5px;font-size:12px;line-height:1.45}.empty{color:var(--green);background:var(--greenbg);border:1px solid #b9ead5;padding:13px;border-radius:8px;font-weight:800}.footer{text-align:center;color:var(--muted);font-size:11px;line-height:1.7;margin-top:26px;padding:10px 0}
 @media(max-width:700px){.header{display:block}.status{display:inline-block;margin-top:16px}.summary{grid-template-columns:1fr}.wrap{padding:15px 10px}.section{padding:16px}}@media print{body{background:#fff}.wrap{max-width:none;padding:0}.section,.header{break-inside:avoid;box-shadow:none}}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.metric{border:1px solid var(--line);border-top:3px solid var(--blue);border-radius:9px;padding:14px;background:#fff}.metric label{display:block;color:var(--muted);font-size:10px;font-weight:900;letter-spacing:.06em}.metric strong{display:block;font-size:25px;margin:8px 0 4px;font-variant-numeric:tabular-nums}.metric small{color:var(--muted);font-size:11px}.metric.done{border-top-color:var(--green)}.metric.done strong{color:var(--green)}.metric.incomplete{border-top-color:var(--amber)}.metric.incomplete strong{color:var(--amber)}
+.charts{display:grid;grid-template-columns:1.2fr 1fr;gap:14px}.chart-panel{border:1px solid var(--line);border-radius:9px;padding:16px;min-width:0}.chart-panel h3{margin:0 0 7px;font-size:15px}.chart-caption{font-size:11px;color:var(--muted);line-height:1.5;margin:0 0 18px}.chart-row{margin:13px 0}.chart-label{display:flex;justify-content:space-between;gap:10px;font-size:11px;margin-bottom:6px}.chart-label strong{overflow-wrap:anywhere}.chart-label span{white-space:nowrap;color:var(--muted)}.track{height:9px;border-radius:99px;background:#edf0f5;overflow:hidden}.track i{display:block;height:100%;background:linear-gradient(90deg,#059669,#6ee7b7);border-radius:99px}.stack{height:18px;display:flex;overflow:hidden;border-radius:5px;background:#edf0f5;margin:20px 0}.seg{height:100%}.seg.passed,.dot.passed{background:#059669}.seg.failed,.dot.failed{background:#dc2626}.seg.assumption,.dot.assumption{background:#d97706}.seg.ignored,.dot.ignored{background:#8792a2}.legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;font-size:11px;color:var(--muted)}.legend span{display:flex;align-items:center;gap:6px}.legend b{margin-left:auto;color:var(--ink)}.dot{width:9px;height:9px;border-radius:2px;flex:0 0 9px}
+@media(max-width:700px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.charts{grid-template-columns:1fr}}@media print{.metrics,.charts{break-inside:avoid}}
 """
 
     out = [
@@ -110,6 +113,34 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em}.subtitle{margin-top:7px;color:
         )
         return "".join(out)
 
+    module_total = sum(num(suite.get("modules")) for suite in suites)
+    module_done = sum(num(suite.get("completedModules")) for suite in suites)
+    module_incomplete = max(0, module_total - module_done)
+    completion_rate = round(module_done / module_total * 100) if module_total else 0
+    out.append("<section class='section'><div class='title'>Suite completion overview</div><div class='metrics'>")
+    metric_values = [("TOTAL MODULES", module_total, "Across all detected suites", "total"), ("COMPLETED", module_done, (str(completion_rate) + "% completion") if module_total else "No module data", "done"), ("INCOMPLETE", module_incomplete, "Modules not yet completed", "incomplete"), ("SUITES", len(suites), "Detected certification suites", "suites")]
+    for label, value, caption, kind in metric_values:
+        out.append("<div class='metric " + e(kind) + "'><label>" + e(label) + "</label><strong>" + format(value, ',') + "</strong><small>" + e(caption) + "</small></div>")
+    out.append("</div></section>")
+    outcomes = [("Passed", num(overall.get("passed")), "passed"), ("Failed", num(overall.get("failed")), "failed"), ("Assumption failures", num(overall.get("assumptionFailures")), "assumption"), ("Ignored", num(overall.get("ignored")), "ignored")]
+    outcome_total = sum(value for _, value, _ in outcomes)
+    out.append("<section class='section'><div class='title'>Visual execution charts</div><div class='charts'><div class='chart-panel'><h3>Suite completion</h3><p class='chart-caption'>Completed modules compared with total modules in each suite.</p>")
+    if not suites:
+        out.append("<div class='empty'>No suite data available.</div>")
+    for suite in suites:
+        total = num(suite.get("modules"))
+        done = num(suite.get("completedModules"))
+        pct = max(0, min(100, done / total * 100)) if total else 0
+        out.append("<div class='chart-row'><div class='chart-label'><strong>" + e(suite.get("name")) + "</strong><span>" + format(done, ',') + " / " + format(total, ',') + " · " + str(round(pct)) + "%</span></div><div class='track' role='img' aria-label='Module completion'><i style='width:" + format(pct, '.3f') + "%'></i></div></div>")
+    out.append("</div><div class='chart-panel'><h3>Test outcome distribution</h3><p class='chart-caption'>" + format(outcome_total, ',') + " passed, failed, assumption-failure and ignored outcomes combined.</p><div class='stack' role='img' aria-label='Test outcome distribution'>")
+    for label, value, kind in outcomes:
+        width = value / outcome_total * 100 if outcome_total else 0
+        if width > 0:
+            out.append("<span class='seg " + kind + "' style='width:" + format(width, '.3f') + "%'></span>")
+    out.append("</div><div class='legend'>")
+    for label, value, kind in outcomes:
+        out.append("<span><i class='dot " + kind + "'></i>" + e(label) + "<b>" + format(value, ',') + "</b></span>")
+    out.append("</div></div></div></section>")
     out.append("<section class='section'><div class='title'>Suite summary</div><div class='table-wrap'><table>"
                "<thead><tr><th>Suite</th><th>Mods</th><th>Done</th><th>Incomplete Modules</th><th>Passed</th><th>Failed</th>"
                "<th>Assumption Failure</th><th>Ignored</th><th>Warnings</th><th>Total Tests</th></tr></thead><tbody>")
