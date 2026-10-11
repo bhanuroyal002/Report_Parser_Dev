@@ -78,8 +78,10 @@ def submit_feedback():
 
     if not message:
         return jsonify({"error": "Please enter your feedback before submitting."}), 400
-    if email and ("\n" in email or "\r" in email or "@" not in email):
-        return jsonify({"error": "Enter a valid email address or leave it blank."}), 400
+    if not email:
+        return jsonify({"error": "Please enter your email address."}), 400
+    if ("\\n" in email or "\\r" in email or "@" not in email or "." not in email.rsplit("@", 1)[-1]):
+        return jsonify({"error": "Enter a valid email address."}), 400
 
     submitted_at = datetime.now(timezone.utc).isoformat()
     feedback_id = None
