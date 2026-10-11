@@ -22,6 +22,18 @@ def index():
     return render_template("index.html")
 
 
+@app.get("/healthz")
+def healthz():
+    """Lightweight readiness probe for deployment and periodic monitoring."""
+    try:
+        with history.conn() as connection:
+            connection.execute("SELECT 1").fetchone()
+        return jsonify({"status": "healthy", "database": "ok"}), 200
+    except Exception:
+        app.logger.exception("health check failed")
+        return jsonify({"status": "unhealthy", "database": "error"}), 503
+
+
 @app.get("/api/dashboard")
 def dashboard():
     return jsonify({
