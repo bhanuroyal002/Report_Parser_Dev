@@ -4,7 +4,7 @@ def notifyReportParserWebhook(String status) {
         return
     }
 
-    withEnv(["REPORT_PARSER_NOTIFY_STATUS=\${status}"]) {
+    withEnv(["REPORT_PARSER_NOTIFY_STATUS=" + status]) {
         sh '''
             set +x
             payload="$(python3 -c 'import json, os; s=os.environ["REPORT_PARSER_NOTIFY_STATUS"]; print(json.dumps({"text": "Report Parser deployment " + s + ": " + os.environ.get("JOB_NAME", "Jenkins job") + " #" + os.environ.get("BUILD_NUMBER", ""), "status": s, "job": os.environ.get("JOB_NAME", ""), "buildNumber": os.environ.get("BUILD_NUMBER", ""), "buildUrl": os.environ.get("BUILD_URL", "")}))')"
