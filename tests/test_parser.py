@@ -39,7 +39,7 @@ class TradefedParserTests(unittest.TestCase):
         self.assertEqual(report["securityPatch"], "2026-09-05")
         self.assertEqual(report["failed"], 1)
         self.assertEqual(report["failures"][0]["testCase"], "SampleTest#testExample")
-        self.assertIn("AssertionError", report["failures"][0]["details"])
+        self.assertIn("expected true but was false", report["failures"][0]["details"])
 
     def test_analyze_zip_returns_dashboard_summary(self):
         with tempfile.TemporaryDirectory() as tmp:
