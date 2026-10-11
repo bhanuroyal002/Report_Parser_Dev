@@ -1,0 +1,11 @@
+.git
+.venv
+.ci-venv
+__pycache__
+.pytest_cache
+*.py[cod]
+*.db
+data/
+.env
+*.tar.gz
+.DS_Store
