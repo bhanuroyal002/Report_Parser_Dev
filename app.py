@@ -1,5 +1,8 @@
 import os
+import smtplib
+import ssl
 import tempfile
+from email.message import EmailMessage
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, Response
@@ -20,6 +23,70 @@ history = HistoryStore(DB)
 @app.get("/")
 def index():
     return render_template("index.html")
+
+
+@app.get("/feedback")
+def feedback_form():
+    return render_template("feedback.html")
+
+
+@app.post("/api/feedback")
+def submit_feedback():
+    payload = request.get_json(silent=True) or request.form
+    name = str(payload.get("name", "")).strip()[:120]
+    email = str(payload.get("email", "")).strip()[:254]
+    category = str(payload.get("category", "General feedback")).strip()[:80]
+    subject = str(payload.get("subject", "")).strip()[:160]
+    message = str(payload.get("message", "")).strip()[:10000]
+
+    if not message:
+        return jsonify({"error": "Please enter your feedback before submitting."}), 400
+    if email and ("\\n" in email or "\\r" in email or "@" not in email):
+        return jsonify({"error": "Enter a valid email address or leave it blank."}), 400
+
+    smtp_host = os.getenv("SMTP_HOST", "").strip()
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER", "").strip()
+    smtp_password = os.getenv("SMTP_PASSWORD", "")
+    sender = os.getenv("FEEDBACK_FROM_EMAIL", smtp_user).strip()
+    recipients = [
+        address.strip() for address in os.getenv(
+            "FEEDBACK_TO_EMAILS",
+            "bhanuprakash.narla1@vantiva.com,bhanuprakash.narla@gmail.com"
+        ).split(",") if address.strip()
+    ]
+    if not smtp_host or not sender or not recipients:
+        app.logger.error("Feedback email is not configured: SMTP_HOST and FEEDBACK_FROM_EMAIL are required.")
+        return jsonify({"error": "Feedback delivery is not configured yet. Please try again later."}), 503
+
+    mail = EmailMessage()
+    mail["Subject"] = "[GCT Insight Feedback] " + (subject or category)
+    mail["From"] = sender
+    mail["To"] = recipients
+    mail.set_content(
+        "New GCT Insight feedback submission\\n\\n"
+        f"Category: {category}\\n"
+        f"Name: {name or 'Not provided'}\\n"
+        f"Reply email: {email or 'Not provided'}\\n\\n"
+        f"Feedback:\\n{message}\\n"
+    )
+    if email:
+        mail["Reply-To"] = email
+
+    try:
+        context = ssl.create_default_context()
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+            server.ehlo()
+            server.starttls(context=context)
+            server.ehlo()
+            if smtp_user:
+                server.login(smtp_user, smtp_password)
+            server.send_message(mail)
+    except Exception:
+        app.logger.exception("Feedback email delivery failed")
+        return jsonify({"error": "We couldn't send your feedback right now. Please try again later."}), 502
+
+    return jsonify({"message": "Thank you! Your feedback has been sent."}), 200
 
 
 @app.get("/healthz")
