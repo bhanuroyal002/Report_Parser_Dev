@@ -112,7 +112,7 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em}.subtitle{margin-top:7px;color:
 
     out.append("<section class='section'><div class='title'>Suite summary</div><div class='table-wrap'><table>"
                "<thead><tr><th>Suite</th><th>Mods</th><th>Done</th><th>Inc</th><th>Passed</th><th>Failed</th>"
-               "<th>Assumption Failure</th><th>Ignored</th><th>Total Tests</th></tr></thead><tbody>")
+               "<th>Assumption Failure</th><th>Ignored</th><th>Warnings</th><th>Total Tests</th></tr></thead><tbody>")
 
     for suite in suites:
         mods = num(suite.get("modules"))
@@ -125,7 +125,7 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em}.subtitle{margin-top:7px;color:
             f"<td class='pass-text'>{num(suite.get('passed'))}</td>"
             f"<td class='{'pass-text' if failed_count == 0 else 'fail-text'}'>{failed_count}</td>"
             f"<td>{num(suite.get('assumptionFailures'))}</td><td>{num(suite.get('ignored'))}</td>"
-            f"<td>{num(suite.get('testCases'))}</td></tr>"
+            f"<td>{num(suite.get('warnings'))}</td><td>{num(suite.get('testCases'))}</td></tr>"
         )
     out.append("</tbody></table></div></section>")
 
@@ -136,6 +136,7 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em}.subtitle{margin-top:7px;color:
         for item in incomplete:
             out.append(
                 f"<div class='issue'><strong>{e(item.get('suite'))} {e(item.get('module'))}</strong>"
+                f"<span>{e(item.get('reason') or 'Module incomplete')}</span>"
             )
             out.append("</div>")
     out.append("</section>")
@@ -148,6 +149,7 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em}.subtitle{margin-top:7px;color:
             out.append(
                 f"<div class='issue'><strong> - {e(failure.get('suite'))} "
                 f"{e(failure.get('module'))} :: {e(failure.get('testCase'))}</strong>"
+                f"<span>{e(failure.get('details') or 'No failure details recorded.')}</span>"
             )
             out.append("</div>")
     out.append("</section>")

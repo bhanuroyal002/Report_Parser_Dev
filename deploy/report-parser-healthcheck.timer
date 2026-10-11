@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Report Parser health check periodically
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+Unit=report-parser-healthcheck.service
+
+[Install]
+WantedBy=timers.target

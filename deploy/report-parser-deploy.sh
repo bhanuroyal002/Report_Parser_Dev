@@ -36,7 +36,7 @@ trap cleanup EXIT
 
 tar -xzf "$ARTIFACT" -C "$TMP_DIR"
 
-for required in app.py parser.py history.py report_builder.py requirements.txt gunicorn.conf.py; do
+for required in app.py parser.py history.py report_builder.py requirements.txt gunicorn.conf.py deploy/report-parser-healthcheck.sh deploy/report-parser-healthcheck.service deploy/report-parser-healthcheck.timer; do
     if [[ ! -f "$TMP_DIR/$required" ]]; then
         echo "ERROR: deployment artifact is missing $required"
         exit 5
@@ -60,6 +60,15 @@ fi
 "$APP_DIR/.venv/bin/pip" install -r "$APP_DIR/requirements.txt"
 
 chown -R reportparser:reportparser "$APP_DIR"
+
+# Install and enable periodic application health monitoring.
+install -m 0755 "$TMP_DIR/deploy/report-parser-healthcheck.sh" /usr/local/sbin/report-parser-healthcheck
+install -m 0644 "$TMP_DIR/deploy/report-parser-healthcheck.service" /etc/systemd/system/report-parser-healthcheck.service
+install -m 0644 "$TMP_DIR/deploy/report-parser-healthcheck.timer" /etc/systemd/system/report-parser-healthcheck.timer
+mkdir -p /var/lib/report-parser-monitoring
+chmod 0750 /var/lib/report-parser-monitoring
+systemctl daemon-reload
+systemctl enable --now report-parser-healthcheck.timer
 
 systemctl restart "$SERVICE"
 systemctl is-active --quiet "$SERVICE"
