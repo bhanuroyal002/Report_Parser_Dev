@@ -1,0 +1,27 @@
+services:
+  report-parser:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: report-parser:local
+    container_name: report-parser-container
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      DATABASE_PATH: "/app/data/gct_report_parser.db"
+      MAX_FILE_SIZE_MB: "${MAX_FILE_SIZE_MB:-500}"
+      MAX_REQUEST_SIZE_MB: "${MAX_REQUEST_SIZE_MB:-1024}"
+      MAX_ZIP_DEPTH: "${MAX_ZIP_DEPTH:-20}"
+      WEB_CONCURRENCY: "${WEB_CONCURRENCY:-2}"
+      GUNICORN_TIMEOUT: "${GUNICORN_TIMEOUT:-900}"
+    volumes:
+      - /opt/report_parser/data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
