@@ -122,7 +122,7 @@ def submit_feedback():
         )
         with sqlite3.connect(DB, timeout=10) as connection:
             connection.execute(
-                "UPDATE user_feedback SET status = 'EMAILED' WHERE id = ?",
+                "UPDATE user_feedback SET status = 'QUEUED' WHERE id = ?",
                 (feedback_id,),
             )
         return jsonify({
