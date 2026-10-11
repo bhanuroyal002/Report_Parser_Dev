@@ -1,0 +1,9 @@
+[Unit]
+Description=Check Report Parser application health
+After=network-online.target report-parser.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/report-parser-monitoring.env
+ExecStart=/usr/local/sbin/report-parser-healthcheck
