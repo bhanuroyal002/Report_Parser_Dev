@@ -14,8 +14,10 @@ from report_builder import build_dashboard_html
 
 BASE = Path(__file__).resolve().parent
 DB = os.getenv("DATABASE_PATH", str(BASE / "data" / "gct_report_parser.db"))
-MAX_FILE = int(os.getenv("MAX_FILE_SIZE_MB", "500")) * 1024 * 1024
-MAX_REQUEST = int(os.getenv("MAX_REQUEST_SIZE_MB", "1024")) * 1024 * 1024
+MAX_FILE_MB = max(0, int(os.getenv("MAX_FILE_SIZE_MB", "0")))
+MAX_FILE = MAX_FILE_MB * 1024 * 1024 if MAX_FILE_MB else 0
+MAX_REQUEST_MB = max(0, int(os.getenv("MAX_REQUEST_SIZE_MB", "0")))
+MAX_REQUEST = MAX_REQUEST_MB * 1024 * 1024 if MAX_REQUEST_MB else None
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST
 history = HistoryStore(DB)
@@ -214,18 +216,26 @@ def analyze():
                 }), 400
 
             fd, temp_path = tempfile.mkstemp(prefix="gct-report-", suffix=".zip")
-            os.close(fd)
-            uploaded.save(temp_path)
-
-            if os.path.getsize(temp_path) > MAX_FILE:
-                return jsonify({
-                    "error": (
-                        f"{uploaded.filename} exceeds the "
-                        f"{MAX_FILE // 1048576} MB file limit."
-                    )
-                }), 413
-
             paths.append((uploaded.filename, temp_path))
+            written = 0
+            with os.fdopen(fd, "wb") as output:
+                while True:
+                    # Read at most one byte beyond the configured limit so
+                    # oversized uploads are rejected without copying the
+                    # entire file to the application's temporary directory.
+                    chunk_size = 1024 * 1024 if not MAX_FILE else min(1024 * 1024, MAX_FILE - written + 1)
+                    chunk = uploaded.stream.read(chunk_size)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    if MAX_FILE and written > MAX_FILE:
+                        return jsonify({
+                            "error": (
+                                f"{uploaded.filename} exceeds the configured "
+                                f"{MAX_FILE_MB} MB file limit."
+                            )
+                        }), 413
+                    output.write(chunk)
 
         if not paths:
             return jsonify({"error": "Upload at least one report ZIP file."}), 400
@@ -238,7 +248,7 @@ def analyze():
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
         app.logger.exception("analysis failed")
-        return jsonify({"error": f"Analysis failed: {exc}"}), 500
+        return jsonify({"error": "Analysis failed unexpectedly. Check the application logs for details."}), 500
     finally:
         for _, temp_path in paths:
             try:
@@ -269,7 +279,7 @@ def publish():
 @app.errorhandler(413)
 def too_large(_):
     return jsonify({
-        "error": "Upload is too large. The total request limit is 1 GB."
+        "error": "Upload is too large for the configured server or proxy limit. Increase that limit and retry."
     }), 413
 
 

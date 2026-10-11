@@ -6,7 +6,12 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from xml.etree import ElementTree as ET
 
-MAX_DEPTH = int(os.getenv("MAX_ZIP_DEPTH", "20"))
+MAX_DEPTH = max(0, int(os.getenv("MAX_ZIP_DEPTH", "20")))
+MAX_ZIP_ENTRY_MB = max(0, int(os.getenv("MAX_ZIP_ENTRY_MB", "0")))
+MAX_TOTAL_UNCOMPRESSED_MB = max(0, int(os.getenv("MAX_TOTAL_UNCOMPRESSED_MB", "0")))
+MAX_ZIP_ENTRIES = max(0, int(os.getenv("MAX_ZIP_ENTRIES", "0")))
+MAX_ZIP_ENTRY_BYTES = MAX_ZIP_ENTRY_MB * 1024 * 1024 if MAX_ZIP_ENTRY_MB else 0
+MAX_TOTAL_UNCOMPRESSED_BYTES = MAX_TOTAL_UNCOMPRESSED_MB * 1024 * 1024 if MAX_TOTAL_UNCOMPRESSED_MB else 0
 
 
 def first(*values):
@@ -288,15 +293,25 @@ def parse_tradefed_xml(data, source):
     }
 
 
-def scan_archive(archive, source, depth, seen_xml, seen_zip):
+def scan_archive(archive, source, depth, seen_xml, seen_zip, budget=None):
+    if budget is None:
+        budget = {"entries": 0, "uncompressed_bytes": 0}
     if depth > MAX_DEPTH:
         return [], 0, [f"{source}: maximum nested ZIP depth reached ({MAX_DEPTH})."]
+
+    entries = archive.infolist()
+    if MAX_ZIP_ENTRIES and len(entries) > MAX_ZIP_ENTRIES:
+        return [], 0, [f"{source}: ZIP contains too many entries ({len(entries)}; limit {MAX_ZIP_ENTRIES})."]
 
     reports = []
     xml_found = 0
     errors = []
 
-    for entry in archive.infolist():
+    for entry in entries:
+        budget["entries"] += 1
+        if MAX_ZIP_ENTRIES and budget["entries"] > MAX_ZIP_ENTRIES:
+            errors.append(f"{source}: total ZIP entry limit reached ({MAX_ZIP_ENTRIES}). Remaining entries were skipped.")
+            break
         if entry.is_dir():
             continue
         name = entry.filename
@@ -306,11 +321,25 @@ def scan_archive(archive, source, depth, seen_xml, seen_zip):
         if not (is_result_xml or is_nested_zip):
             continue
 
+        if MAX_ZIP_ENTRY_BYTES and entry.file_size > MAX_ZIP_ENTRY_BYTES:
+            errors.append(
+                f"{source}!{name}: entry is too large "
+                f"({entry.file_size // 1048576} MB; limit {MAX_ZIP_ENTRY_MB} MB)."
+            )
+            continue
+        if MAX_TOTAL_UNCOMPRESSED_BYTES and budget["uncompressed_bytes"] + entry.file_size > MAX_TOTAL_UNCOMPRESSED_BYTES:
+            errors.append(
+                f"{source}!{name}: total uncompressed ZIP data limit reached "
+                f"({MAX_TOTAL_UNCOMPRESSED_MB} MB). Remaining entries were skipped."
+            )
+            break
+
         try:
             payload = archive.read(entry)
         except (OSError, RuntimeError, zipfile.BadZipFile) as exc:
             errors.append(f"{source}!{name}: unable to read ZIP entry ({exc})")
             continue
+        budget["uncompressed_bytes"] += len(payload)
 
         if is_result_xml:
             xml_found += 1
@@ -334,7 +363,8 @@ def scan_archive(archive, source, depth, seen_xml, seen_zip):
             try:
                 with zipfile.ZipFile(io.BytesIO(payload)) as nested_archive:
                     nested, found, nested_errors = scan_archive(
-                        nested_archive, f"{source}!{name}", depth + 1, seen_xml, seen_zip
+                        nested_archive, f"{source}!{name}", depth + 1,
+                        seen_xml, seen_zip, budget
                     )
             except zipfile.BadZipFile as exc:
                 errors.append(f"{source}!{name}: invalid nested ZIP ({exc})")
@@ -346,21 +376,21 @@ def scan_archive(archive, source, depth, seen_xml, seen_zip):
     return reports, xml_found, errors
 
 
-def scan_bytes(data, source, depth, seen_xml, seen_zip):
+def scan_bytes(data, source, depth, seen_xml, seen_zip, budget=None):
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
-            return scan_archive(archive, source, depth, seen_xml, seen_zip)
+            return scan_archive(archive, source, depth, seen_xml, seen_zip, budget)
     except zipfile.BadZipFile as exc:
         return [], 0, [f"{source}: invalid ZIP ({exc})"]
 
 
-def scan(path, name, seen_xml, seen_zip):
-    # Open the outer ZIP directly from disk instead of loading the entire
-    # archive into RAM first. This avoids an extra full-file memory copy for
-    # large certification reports; nested ZIPs are read only when encountered.
+def scan(path, name, seen_xml, seen_zip, budget=None):
+    # Open the outer ZIP directly from disk. Entry-count and expanded-size
+    # limits are optional (0 = unlimited) so legitimate multi-GB reports are
+    # accepted by default; set finite limits for constrained deployments.
     try:
         with zipfile.ZipFile(path) as archive:
-            return scan_archive(archive, name, 0, seen_xml, seen_zip)
+            return scan_archive(archive, name, 0, seen_xml, seen_zip, budget)
     except zipfile.BadZipFile as exc:
         return [], 0, [f"{name}: invalid ZIP ({exc})"]
     except OSError as exc:
@@ -528,9 +558,10 @@ def analyze_reports(files):
     diagnostics = []
     seen_xml = set()
     seen_zip = set()
+    budget = {"entries": 0, "uncompressed_bytes": 0}
 
     for filename, path in files:
-        reports, xml_found, errors = scan(path, filename, seen_xml, seen_zip)
+        reports, xml_found, errors = scan(path, filename, seen_xml, seen_zip, budget)
         all_reports.extend(reports)
         diagnostics.append({
             "file": filename,
@@ -540,7 +571,15 @@ def analyze_reports(files):
         })
 
     if not all_reports:
-        raise ValueError("No recognized Tradefed test_result.xml reports were found in the uploaded ZIP files.")
+        details = "; ".join(
+            error
+            for diagnostic in diagnostics
+            for error in diagnostic["errors"][:2]
+        )
+        message = "No recognized Tradefed test_result.xml reports were found in the uploaded ZIP files."
+        if details:
+            message += f" Details: {details}"
+        raise ValueError(message)
 
     reports_by_build = OrderedDict()
     known_fingerprints = OrderedDict()

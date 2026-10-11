@@ -14,7 +14,12 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY --chown=10001:10001 app.py parser.py history.py report_builder.py gunicorn.conf.py ./
 COPY --chown=10001:10001 templates/ ./templates/
 COPY --chown=10001:10001 static/ ./static/
-RUN mkdir -p /app/data && chown 10001:10001 /app/data
+COPY tests/ ./tests/
+# Run regression tests with the same installed dependencies used by production.
+# Test artifacts are removed in this layer and are not shipped in the final image.
+RUN DATABASE_PATH=/tmp/gct-report-parser-tests.db python -m unittest discover -s tests -v && \
+    rm -rf tests /tmp/gct-report-parser-tests.db /tmp/gct-report-parser-tests.db-shm /tmp/gct-report-parser-tests.db-wal && \
+    mkdir -p /app/data && chown 10001:10001 /app/data
 USER 10001:10001
 EXPOSE 8080
 STOPSIGNAL SIGTERM

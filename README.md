@@ -112,57 +112,42 @@ This is suitable for local development, but not for production deployment.
 
 ## Production deployment
 
-For a shared server, the repository is set up to run using Gunicorn behind a systemd service.
+The shared server currently uses Docker for the application runtime. Jenkins packages the checked-out commit and calls the server-side deployment helper at `/usr/local/sbin/report-parser-deploy`, which deploys the versioned image and checks `/healthz`. The repository implementation is `deploy/report-parser-deploy.sh`.
 
-### 1. Provision the server
+### Deployment flow
+
+1. Jenkins checks out the selected commit and validates Python and shell syntax.
+2. Jenkins packages the source without the Git history, local virtual environments, database, or `.env`.
+3. The deployment helper syncs application files while preserving the server's `.env` and persistent `data/` directory.
+4. Docker builds a versioned image. The image build runs the regression tests before the deployment script replaces the running container.
+5. The deployment script starts the new container, checks `/healthz`, and attempts to restart the previous image if the new container fails its health check.
+6. Jenkins checks both `/healthz` and the home page after deployment.
+
+The application is expected at `http://<server-ip>:8080`. Keep `/opt/report_parser/data` and `/opt/report_parser/.env` outside source control. Do not run the legacy systemd application service alongside the Docker container on port 8080.
+
+### Manual image build
 
 ```bash
-sudo bash deploy/install-server.sh
+docker build -t report-parser:local .
 ```
 
-This script:
-
-- creates/updates the app directory under `/opt/report_parser`
-- clones or pulls the repo
-- creates a virtual environment
-- installs Python requirements
-- copies `.env.example` to `.env`
-- sets `HOST=0.0.0.0` and `PORT=8080`
-- installs the `report-parser.service` systemd unit
-- enables and starts the service
-
-### 2. Runtime service
-
-The service definition is installed at:
-
-```text
-/etc/systemd/system/report-parser.service
-```
-
-It runs the app with Gunicorn using the config in `gunicorn.conf.py`.
-
-### 3. Smoke check
-
-The app is expected to be reachable on:
-
-```text
-http://<server-ip>:8080
-```
-
-The Jenkins pipeline also runs a smoke test by curling `/` after deployment.
+A successful image build also means the included regression test suite passed.
 
 ## Configuration
 
-The app reads configuration from environment variables. Example values are in `.env.example`:
+The app reads configuration from environment variables. Example values are in `.env.example`. By default, the application has no fixed upload-size cap, so an individual ZIP and the combined request can exceed 1 GB. Uploads are copied to temporary files in chunks. The host disk must have enough free space, and any reverse proxy in front of the app must also permit the request size and duration. Note: relevant XML and nested ZIP entries are still read into memory during parsing; extremely large expanded entries may require additional streaming-parser work or substantial RAM.
 
 ```dotenv
 HOST=127.0.0.1
 PORT=8080
 DEBUG=false
 DATABASE_PATH=data/gct_report_parser.db
-MAX_FILE_SIZE_MB=500
-MAX_REQUEST_SIZE_MB=1024
+MAX_FILE_SIZE_MB=0
+MAX_REQUEST_SIZE_MB=0
 MAX_ZIP_DEPTH=20
+MAX_ZIP_ENTRY_MB=0
+MAX_TOTAL_UNCOMPRESSED_MB=0
+MAX_ZIP_ENTRIES=0
 ```
 
 ### Meaning of the key settings
@@ -171,9 +156,12 @@ MAX_ZIP_DEPTH=20
 - `PORT`: application port
 - `DEBUG`: enable Flask debug mode
 - `DATABASE_PATH`: SQLite database path
-- `MAX_FILE_SIZE_MB`: maximum size of an individual zip file upload
-- `MAX_REQUEST_SIZE_MB`: maximum size of the request payload
-- `MAX_ZIP_DEPTH`: maximum nested zip recursion depth
+- `MAX_FILE_SIZE_MB`: optional maximum size of an individual ZIP upload in MB; `0` disables the application-level limit (default)
+- `MAX_REQUEST_SIZE_MB`: optional maximum request size in MB; `0` disables the Flask request limit (default)
+- `MAX_ZIP_DEPTH`: maximum nested ZIP recursion depth
+- `MAX_ZIP_ENTRY_MB`: optional maximum expanded size of one relevant XML/ZIP entry in MB; `0` disables this parser limit (default)
+- `MAX_TOTAL_UNCOMPRESSED_MB`: optional expanded-data budget in MB per analysis request; `0` disables this parser limit (default)
+- `MAX_ZIP_ENTRIES`: optional maximum ZIP entries scanned per analysis request; `0` disables this parser limit (default)
 
 ## Web app behavior
 

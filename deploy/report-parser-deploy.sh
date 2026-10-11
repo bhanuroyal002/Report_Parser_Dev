@@ -58,11 +58,6 @@ start_container() {
         "${env_args[@]}" \
         --env HOST=0.0.0.0 --env PORT=8080 \
         --env DATABASE_PATH=/app/data/gct_report_parser.db \
-        --env MAX_FILE_SIZE_MB="${MAX_FILE_SIZE_MB:-500}" \
-        --env MAX_REQUEST_SIZE_MB="${MAX_REQUEST_SIZE_MB:-1024}" \
-        --env MAX_ZIP_DEPTH="${MAX_ZIP_DEPTH:-20}" \
-        --env WEB_CONCURRENCY="${WEB_CONCURRENCY:-2}" \
-        --env GUNICORN_TIMEOUT="${GUNICORN_TIMEOUT:-900}" \
         --volume "$APP_DIR/data:/app/data" "$image"
 }
 rollback() {
