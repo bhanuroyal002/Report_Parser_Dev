@@ -37,8 +37,12 @@ pipeline {
                 sh '''
                     set -eux
                     python3 --version
-                    python3 -m py_compile app.py parser.py history.py report_builder.py
+                    python3 -m py_compile app.py parser.py history.py report_builder.py tests/test_parser.py tests/test_app.py
                     bash -n deploy/install-server.sh deploy/report-parser-deploy.sh deploy/report-parser-healthcheck.sh
+                    test -d tests
+                    test -f tests/test_parser.py
+                    test -f tests/test_app.py
+                    test -f deploy/report-parser-deploy.sh
                     test -f requirements.txt
                     test -f Dockerfile
                     test -f docker-compose.yml
@@ -46,7 +50,7 @@ pipeline {
                     test -f gunicorn.conf.py
                     test -f deploy/report-parser-healthcheck.service
                     test -f deploy/report-parser-healthcheck.timer
-                    echo "Validation passed; Python dependencies are installed in the Docker image, not on Jenkins."
+                    echo "Static validation passed. The Docker image build runs the regression tests before deployment."
                 '''
             }
         }
