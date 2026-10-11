@@ -7,11 +7,11 @@ from datetime import datetime, timezone
 from xml.etree import ElementTree as ET
 
 MAX_DEPTH = max(0, int(os.getenv("MAX_ZIP_DEPTH", "20")))
-MAX_ZIP_ENTRY_MB = max(1, int(os.getenv("MAX_ZIP_ENTRY_MB", "1024")))
-MAX_TOTAL_UNCOMPRESSED_MB = max(1, int(os.getenv("MAX_TOTAL_UNCOMPRESSED_MB", "4096")))
-MAX_ZIP_ENTRIES = max(100, int(os.getenv("MAX_ZIP_ENTRIES", "200000")))
-MAX_ZIP_ENTRY_BYTES = MAX_ZIP_ENTRY_MB * 1024 * 1024
-MAX_TOTAL_UNCOMPRESSED_BYTES = MAX_TOTAL_UNCOMPRESSED_MB * 1024 * 1024
+MAX_ZIP_ENTRY_MB = max(0, int(os.getenv("MAX_ZIP_ENTRY_MB", "0")))
+MAX_TOTAL_UNCOMPRESSED_MB = max(0, int(os.getenv("MAX_TOTAL_UNCOMPRESSED_MB", "0")))
+MAX_ZIP_ENTRIES = max(0, int(os.getenv("MAX_ZIP_ENTRIES", "0")))
+MAX_ZIP_ENTRY_BYTES = MAX_ZIP_ENTRY_MB * 1024 * 1024 if MAX_ZIP_ENTRY_MB else 0
+MAX_TOTAL_UNCOMPRESSED_BYTES = MAX_TOTAL_UNCOMPRESSED_MB * 1024 * 1024 if MAX_TOTAL_UNCOMPRESSED_MB else 0
 
 
 def first(*values):
@@ -300,7 +300,7 @@ def scan_archive(archive, source, depth, seen_xml, seen_zip, budget=None):
         return [], 0, [f"{source}: maximum nested ZIP depth reached ({MAX_DEPTH})."]
 
     entries = archive.infolist()
-    if len(entries) > MAX_ZIP_ENTRIES:
+    if MAX_ZIP_ENTRIES and len(entries) > MAX_ZIP_ENTRIES:
         return [], 0, [f"{source}: ZIP contains too many entries ({len(entries)}; limit {MAX_ZIP_ENTRIES})."]
 
     reports = []
@@ -309,7 +309,7 @@ def scan_archive(archive, source, depth, seen_xml, seen_zip, budget=None):
 
     for entry in entries:
         budget["entries"] += 1
-        if budget["entries"] > MAX_ZIP_ENTRIES:
+        if MAX_ZIP_ENTRIES and budget["entries"] > MAX_ZIP_ENTRIES:
             errors.append(f"{source}: total ZIP entry limit reached ({MAX_ZIP_ENTRIES}). Remaining entries were skipped.")
             break
         if entry.is_dir():
@@ -321,13 +321,13 @@ def scan_archive(archive, source, depth, seen_xml, seen_zip, budget=None):
         if not (is_result_xml or is_nested_zip):
             continue
 
-        if entry.file_size > MAX_ZIP_ENTRY_BYTES:
+        if MAX_ZIP_ENTRY_BYTES and entry.file_size > MAX_ZIP_ENTRY_BYTES:
             errors.append(
                 f"{source}!{name}: entry is too large "
                 f"({entry.file_size // 1048576} MB; limit {MAX_ZIP_ENTRY_MB} MB)."
             )
             continue
-        if budget["uncompressed_bytes"] + entry.file_size > MAX_TOTAL_UNCOMPRESSED_BYTES:
+        if MAX_TOTAL_UNCOMPRESSED_BYTES and budget["uncompressed_bytes"] + entry.file_size > MAX_TOTAL_UNCOMPRESSED_BYTES:
             errors.append(
                 f"{source}!{name}: total uncompressed ZIP data limit reached "
                 f"({MAX_TOTAL_UNCOMPRESSED_MB} MB). Remaining entries were skipped."
@@ -385,9 +385,9 @@ def scan_bytes(data, source, depth, seen_xml, seen_zip, budget=None):
 
 
 def scan(path, name, seen_xml, seen_zip, budget=None):
-    # Open the outer ZIP directly from disk instead of loading the entire
-    # archive into RAM first. Enforce entry and expanded-size budgets before
-    # reading report XML or nested archives to limit ZIP-bomb exposure.
+    # Open the outer ZIP directly from disk. Entry-count and expanded-size
+    # limits are optional (0 = unlimited) so legitimate multi-GB reports are
+    # accepted by default; set finite limits for constrained deployments.
     try:
         with zipfile.ZipFile(path) as archive:
             return scan_archive(archive, name, 0, seen_xml, seen_zip, budget)
