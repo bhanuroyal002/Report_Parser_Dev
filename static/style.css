@@ -104,3 +104,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .dashboard-panel p{margin:0;color:var(--muted);font-size:.76rem;line-height:1.55}
 .dashboard-panel .readiness-chip{white-space:nowrap}
 @media(max-width:720px){.dashboard-panel{padding:18px;margin-bottom:14px}.dashboard-panel h2{font-size:1.55rem}}
+
+/* Keep every analysis result visually grouped under Certification dashboard. */
+.certification-dashboard{background:var(--paper);border:1px solid var(--line);padding:18px;margin:0 0 28px;box-shadow:0 2px 10px rgba(31,20,10,.035)}
+.certification-dashboard>.dashboard-panel{margin:0 0 16px;border:0;border-bottom:1px solid var(--line);box-shadow:none;padding:4px 4px 18px;min-height:0}
+.certification-dashboard>.build-mismatch:empty,.certification-dashboard>.build-info-card:empty{display:none}
+.certification-dashboard>.build-info-card:not(:empty),.certification-dashboard>.build-mismatch:not(:empty){margin-bottom:14px}
+.certification-dashboard>.stats:not(:empty){margin-bottom:14px}
+.certification-dashboard>.suite-grid:not(:empty){margin-bottom:14px}
+.certification-dashboard>.issues-grid:not(.hidden){margin-top:0;margin-bottom:0}
+@media(max-width:720px){.certification-dashboard{padding:12px;margin-bottom:22px}.certification-dashboard>.dashboard-panel{padding:4px 4px 14px}}
