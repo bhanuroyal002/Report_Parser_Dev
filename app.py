@@ -214,18 +214,25 @@ def analyze():
                 }), 400
 
             fd, temp_path = tempfile.mkstemp(prefix="gct-report-", suffix=".zip")
-            os.close(fd)
-            uploaded.save(temp_path)
-
-            if os.path.getsize(temp_path) > MAX_FILE:
-                return jsonify({
-                    "error": (
-                        f"{uploaded.filename} exceeds the "
-                        f"{MAX_FILE // 1048576} MB file limit."
-                    )
-                }), 413
-
             paths.append((uploaded.filename, temp_path))
+            written = 0
+            with os.fdopen(fd, "wb") as output:
+                while True:
+                    # Read at most one byte beyond the configured limit so
+                    # oversized uploads are rejected without copying the
+                    # entire file to the application's temporary directory.
+                    chunk = uploaded.stream.read(min(1024 * 1024, MAX_FILE - written + 1))
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    if written > MAX_FILE:
+                        return jsonify({
+                            "error": (
+                                f"{uploaded.filename} exceeds the "
+                                f"{MAX_FILE // 1048576} MB file limit."
+                            )
+                        }), 413
+                    output.write(chunk)
 
         if not paths:
             return jsonify({"error": "Upload at least one report ZIP file."}), 400
@@ -238,7 +245,7 @@ def analyze():
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
         app.logger.exception("analysis failed")
-        return jsonify({"error": f"Analysis failed: {exc}"}), 500
+        return jsonify({"error": "Analysis failed unexpectedly. Check the application logs for details."}), 500
     finally:
         for _, temp_path in paths:
             try:
