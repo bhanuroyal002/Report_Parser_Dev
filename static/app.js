@@ -107,11 +107,12 @@ loadHistory();$("publishBtn").disabled=true;$("viewBtn").disabled=true;
   $("incompleteCount").textContent="0";$("failureCount").textContent="0";
   $("buildMismatch").innerHTML="";
   $("buildInfoCard").innerHTML="";
+  $("readiness").textContent="WAITING FOR REPORTS";$("readiness").className="readiness-chip";
   $("buildFingerprint").textContent="Not detected";
   $("androidVersion").textContent="Not detected";
   $("securityPatch").textContent="Not detected";
   const issuesEl=document.querySelector(".issues-grid");
-  if(issuesEl) issuesEl.style.display="grid";
+  if(issuesEl) issuesEl.classList.add("hidden");
   $("readiness").textContent="WAITING FOR REPORTS";$("readiness").className="readiness-chip";
 });
 $("analyzeBtn").addEventListener("click",()=>{
