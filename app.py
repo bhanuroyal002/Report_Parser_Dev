@@ -1,10 +1,5 @@
 import os
-import sqlite3
 import tempfile
-import urllib.error
-import urllib.parse
-import urllib.request
-from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, Response
@@ -23,124 +18,9 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST
 history = HistoryStore(DB)
 
 
-def trigger_jenkins_feedback_email(*, feedback_id, submitted_at, name, email,
-                                   category, subject, message):
-    """Trigger the dedicated Jenkins job that sends the feedback email."""
-    base_url = os.getenv("JENKINS_URL", "").strip().rstrip("/")
-    job_name = os.getenv("JENKINS_FEEDBACK_JOB", "Report_Parser_Feedback_Notification").strip()
-    username = os.getenv("JENKINS_USER", "").strip()
-    api_token = os.getenv("JENKINS_API_TOKEN", "")
-    if not base_url or not username or not api_token:
-        raise RuntimeError("Jenkins feedback notification is not configured")
-
-    # Jenkins job must be a parameterized Pipeline job. URL-encode every value.
-    params = {
-        "FEEDBACK_ID": str(feedback_id),
-        "SUBMITTED_AT": submitted_at,
-        "FEEDBACK_NAME": name or "Not provided",
-        "FEEDBACK_EMAIL": email,
-        "FEEDBACK_CATEGORY": category,
-        "FEEDBACK_SUBJECT": subject or "New feedback",
-        "FEEDBACK_MESSAGE": message,
-    }
-    url = f"{base_url}/job/{urllib.parse.quote(job_name, safe='')}/buildWithParameters"
-    data = urllib.parse.urlencode(params).encode("utf-8")
-    auth = __import__("base64").b64encode(f"{username}:{api_token}".encode()).decode()
-    req = urllib.request.Request(
-        url, data=data, method="POST",
-        headers={"Authorization": f"Basic {auth}",
-                 "Content-Type": "application/x-www-form-urlencoded"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as response:
-            if response.status not in (200, 201, 202):
-                raise RuntimeError(f"Jenkins returned HTTP {response.status}")
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"Jenkins rejected feedback notification (HTTP {exc.code})") from exc
-
-
 @app.get("/")
 def index():
     return render_template("index.html")
-
-
-@app.get("/feedback")
-def feedback_form():
-    return render_template("feedback.html")
-
-
-@app.post("/api/feedback")
-def submit_feedback():
-    payload = request.get_json(silent=True) or request.form
-    name = str(payload.get("name", "")).strip()[:120]
-    email = str(payload.get("email", "")).strip()[:254]
-    category = str(payload.get("category", "General feedback")).strip()[:80]
-    subject = str(payload.get("subject", "")).strip()[:160]
-    message = str(payload.get("message", "")).strip()[:10000]
-
-    if not message:
-        return jsonify({"error": "Please enter your feedback before submitting."}), 400
-    if not email:
-        return jsonify({"error": "Please enter your email address."}), 400
-    if ("\\n" in email or "\\r" in email or "@" not in email or "." not in email.rsplit("@", 1)[-1]):
-        return jsonify({"error": "Enter a valid email address."}), 400
-
-    submitted_at = datetime.now(timezone.utc).isoformat()
-    feedback_id = None
-    try:
-        with sqlite3.connect(DB, timeout=10) as connection:
-            connection.execute("""
-                CREATE TABLE IF NOT EXISTS user_feedback (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    submitted_at TEXT NOT NULL,
-                    name TEXT NOT NULL,
-                    reply_email TEXT NOT NULL,
-                    category TEXT NOT NULL,
-                    subject TEXT NOT NULL,
-                    message TEXT NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'NEW'
-                )
-            """)
-            cursor = connection.execute("""
-                INSERT INTO user_feedback
-                    (submitted_at, name, reply_email, category, subject, message)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (submitted_at, name, email, category, subject, message))
-            feedback_id = cursor.lastrowid
-    except sqlite3.Error:
-        app.logger.exception("Could not store user feedback")
-        return jsonify({"error": "We couldn't save your feedback right now. Please try again later."}), 500
-
-    # Save first, then notify. A mail outage must never discard user feedback.
-    try:
-        trigger_jenkins_feedback_email(
-            feedback_id=feedback_id,
-            submitted_at=submitted_at,
-            name=name,
-            email=email,
-            category=category,
-            subject=subject,
-            message=message,
-        )
-        with sqlite3.connect(DB, timeout=10) as connection:
-            connection.execute(
-                "UPDATE user_feedback SET status = 'QUEUED' WHERE id = ?",
-                (feedback_id,),
-            )
-        return jsonify({
-            "message": "Thank you! Your feedback was saved and the administrator email notification was queued through Jenkins."
-        }), 200
-    except Exception:
-        app.logger.exception("Feedback %s was saved, but email notification failed", feedback_id)
-        with sqlite3.connect(DB, timeout=10) as connection:
-            connection.execute(
-                "UPDATE user_feedback SET status = 'EMAIL_FAILED' WHERE id = ?",
-                (feedback_id,),
-            )
-        return jsonify({
-            "message": "Your feedback was saved, but Jenkins could not queue the email notification. Please try again later.",
-            "notificationSent": False,
-        }), 202
 
 
 @app.get("/healthz")
