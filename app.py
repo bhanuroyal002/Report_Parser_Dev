@@ -41,7 +41,7 @@ def submit_feedback():
 
     if not message:
         return jsonify({"error": "Please enter your feedback before submitting."}), 400
-    if email and ("\\n" in email or "\\r" in email or "@" not in email):
+    if email and ("\n" in email or "\r" in email or "@" not in email):
         return jsonify({"error": "Enter a valid email address or leave it blank."}), 400
 
     smtp_host = os.getenv("SMTP_HOST", "").strip()
@@ -64,11 +64,11 @@ def submit_feedback():
     mail["From"] = sender
     mail["To"] = recipients
     mail.set_content(
-        "New GCT Insight feedback submission\\n\\n"
-        f"Category: {category}\\n"
-        f"Name: {name or 'Not provided'}\\n"
-        f"Reply email: {email or 'Not provided'}\\n\\n"
-        f"Feedback:\\n{message}\\n"
+        "New GCT Insight feedback submission\n\n"
+        f"Category: {category}\n"
+        f"Name: {name or 'Not provided'}\n"
+        f"Reply email: {email or 'Not provided'}\n\n"
+        f"Feedback:\n{message}\n"
     )
     if email:
         mail["Reply-To"] = email
