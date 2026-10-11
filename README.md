@@ -13,7 +13,6 @@ GCT Insight is a Flask web application that parses Android Tradefed certificatio
 - Store recent successful analyses in SQLite and reopen previous runs.
 - Export a standalone HTML dashboard.
 - Provide application/database health checks for deployment monitoring.
-- Collect user feedback and queue email notification through a configured Jenkins job.
 
 ## How results are interpreted
 
@@ -106,10 +105,6 @@ Copy `.env.example` to `.env` and change values as required. Never commit real c
 | `MAX_ZIP_ENTRY_MB` | Maximum expanded size of a relevant ZIP entry in MB; `0` disables this limit | `0` |
 | `MAX_TOTAL_UNCOMPRESSED_MB` | Maximum expanded data per analysis in MB; `0` disables this limit | `0` |
 | `MAX_ZIP_ENTRIES` | Maximum ZIP entries scanned per analysis; `0` disables this limit | `0` |
-| `JENKINS_URL` | Jenkins base URL used for feedback notifications | unset |
-| `JENKINS_FEEDBACK_JOB` | Parameterized Jenkins job that handles feedback notifications | `Report_Parser_Feedback_Notification` |
-| `JENKINS_USER` | Dedicated Jenkins username for feedback notifications | unset |
-| `JENKINS_API_TOKEN` | API token for that Jenkins user | unset |
 
 A value of `0` disables the corresponding application-level size/count limit. This does **not** guarantee that arbitrarily large archives can be processed safely: the server still needs enough disk space and memory, and any reverse proxy or client timeout may impose its own limits. Relevant XML and nested ZIP entries can consume substantial memory during analysis. Files larger than 1 GB have not been guaranteed by a documented end-to-end stress test.
 
@@ -129,8 +124,6 @@ On the shared server, the deployment helper preserves `/opt/report_parser/.env` 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/` | Main dashboard |
-| `GET` | `/feedback` | Feedback form |
-| `POST` | `/api/feedback` | Save feedback and queue Jenkins notification |
 | `GET` | `/healthz` | Application and SQLite health probe |
 | `GET` | `/api/dashboard` | Empty/default dashboard payload |
 | `GET` | `/api/history` | List stored analysis runs |
@@ -237,10 +230,6 @@ Check that the uploaded reports belong to the same build. Different build finger
 
 Check available disk space and memory, application logs, and request-size/time limits in any proxy in front of the application. Disabling application-level limits does not remove infrastructure limits or memory requirements.
 
-### Feedback is saved but notification is not queued
-
-Feedback is stored before Jenkins notification is attempted. Verify `JENKINS_URL`, the job name, credentials, and the Jenkins user's permission to trigger the configured parameterized job. Do not paste API tokens into logs or source control.
-
 ## Known limitations
 
 - Input parsing is specialized for Android Tradefed `test_result.xml` files.
@@ -252,6 +241,5 @@ Feedback is stored before Jenkins notification is attempted. Verify `JENKINS_URL
 ## Security notes
 
 - Keep `.env`, database files, API tokens, and webhook URLs containing secrets out of Git.
-- Use a dedicated Jenkins account/token with only the permissions required to trigger the feedback job.
 - Restrict network access to the application and Jenkins according to your organization's policies.
 - Review upload limits and available resources before exposing the service to untrusted users.
