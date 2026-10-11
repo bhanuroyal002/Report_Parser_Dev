@@ -68,9 +68,13 @@ form.addEventListener("submit",async(event)=>{
   try{
     const response=await fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(values)});
     const data=await response.json();
-    if(!response.ok) throw new Error(data.error||"Unable to send feedback.");
-    result.className="feedback-result success"; result.textContent=data.message||"Thank you! Your feedback has been sent.";
-    form.reset();
+    if(!response.ok && response.status!==202) throw new Error(data.error||"Unable to send feedback.");
+    if(response.status===202){
+      result.className="feedback-result error"; result.textContent=data.message||"Your feedback was saved, but the email notification could not be queued.";
+    }else{
+      result.className="feedback-result success"; result.textContent=data.message||"Thank you! Your feedback was saved and the email notification was queued.";
+      form.reset();
+    }
   }catch(error){
     result.className="feedback-result error"; result.textContent=error.message||"Unable to send feedback. Please try again.";
   }finally{button.disabled=false;}
