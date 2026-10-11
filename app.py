@@ -1,13 +1,10 @@
 import os
-import smtplib
 import sqlite3
-import ssl
 import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
-from email.message import EmailMessage
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, Response
@@ -19,15 +16,6 @@ BASE = Path(__file__).resolve().parent
 DB = os.getenv("DATABASE_PATH", str(BASE / "data" / "gct_report_parser.db"))
 MAX_FILE = int(os.getenv("MAX_FILE_SIZE_MB", "500")) * 1024 * 1024
 MAX_REQUEST = int(os.getenv("MAX_REQUEST_SIZE_MB", "1024")) * 1024 * 1024
-FEEDBACK_RECIPIENTS = [
-    address.strip()
-    for address in os.getenv(
-        "FEEDBACK_TO_EMAILS",
-        "bhanuprakash.narla1@vantiva.com,bhanuprakash.narla@gmail.com",
-    ).split(",")
-    if address.strip()
-]
-
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST
 history = HistoryStore(DB)
