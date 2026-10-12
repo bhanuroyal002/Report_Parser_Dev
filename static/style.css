@@ -114,4 +114,4 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .certification-dashboard>.suite-grid:not(:empty){margin-bottom:14px}
 .certification-dashboard>.issues-grid:not(.hidden){margin-top:0;margin-bottom:0}
 @media(max-width:720px){.certification-dashboard{padding:12px;margin-bottom:22px}.certification-dashboard>.dashboard-panel{padding:4px 4px 14px}}
-
+.suite-version{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;padding-top:9px;border-top:1px solid #eee5da}.suite-version span{color:#8b8279;font-size:.55rem}.suite-version strong{font-size:.62rem;text-align:right;overflow-wrap:anywhere}
