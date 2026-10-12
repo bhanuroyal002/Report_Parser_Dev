@@ -210,10 +210,22 @@ def apa_upload():
                 parts = fingerprint.split("/")
                 if not project_name and parts:
                     project_name = secure_filename(parts[0].replace(" ", "_"))
-                if len(parts) >= 2:
-                    version_part = parts[-1].split(":", 1)[0]
-                    if version_part and any(ch.isdigit() for ch in version_part):
-                        sw_version = secure_filename(version_part.replace(" ", "_"))
+                # The product SW version is embedded in the fingerprint component
+                # before the user/release-keys suffix, e.g.
+                # PXM-SW-16.0.5.1_16.26.10.08:user/release-keys.
+                for component in reversed(parts):
+                    before_suffix = component.split(":", 1)[0]
+                    marker = "-SW-"
+                    if marker in before_suffix:
+                        candidate = before_suffix.split(marker, 1)[1]
+                        if candidate and any(ch.isdigit() for ch in candidate):
+                            sw_version = secure_filename(candidate.replace(" ", "_"))
+                            break
+                if not sw_version and len(parts) >= 2:
+                    # Fallback for fingerprints without a product-specific -SW- marker.
+                    candidate = parts[-2].split(":", 1)[0]
+                    if candidate and any(ch.isdigit() for ch in candidate):
+                        sw_version = secure_filename(candidate.replace(" ", "_"))
 
         project_name = project_name or "UnknownProject"
         sw_version = sw_version or "UnknownSWVersion"
