@@ -5,7 +5,7 @@ from collections import Counter
 from pathlib import Path
 from werkzeug.utils import secure_filename
 
-from flask import Flask, jsonify, render_template, request, Response, send_file
+from flask import Flask, after_this_request, jsonify, render_template, request, Response, send_file
 from history import HistoryStore
 from parser import analyze_reports
 from report_builder import build_dashboard_html
@@ -212,9 +212,17 @@ def apa_upload():
 
         fd, output_path = tempfile.mkstemp(prefix="gct-apa-upload-", suffix=".zip")
         os.close(fd)
-        with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as package:
+        with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as package:
             for archive_name, path in output_names:
                 package.write(path, arcname=archive_name)
+
+        @after_this_request
+        def remove_package(response):
+            try:
+                os.unlink(output_path)
+            except OSError:
+                pass
+            return response
 
         return send_file(output_path, mimetype="application/zip", as_attachment=True, download_name="APA_upload_reports.zip", conditional=True)
     except ValueError as exc:
