@@ -35,6 +35,7 @@ class TradefedParserTests(unittest.TestCase):
     def test_parse_tradefed_xml_extracts_build_and_failure_details(self):
         report = report_parser.parse_tradefed_xml(tradefed_xml(result="fail"), "fixture.zip!test_result.xml")
         self.assertEqual(report["suite"], "CTS")
+        self.assertEqual(report["version"], "16_r1")
         self.assertEqual(report["fingerprint"], "vendor/device/device:14/UP1A.231005.007/123:userdebug/test-keys")
         self.assertEqual(report["securityPatch"], "2026-09-05")
         self.assertEqual(report["failed"], 1)
@@ -51,6 +52,7 @@ class TradefedParserTests(unittest.TestCase):
         self.assertEqual(dashboard["overall"]["passed"], 1)
         self.assertEqual(dashboard["buildFingerprint"], "vendor/device/device:14/UP1A.231005.007/123:userdebug/test-keys")
         self.assertEqual(dashboard["suites"][0]["name"], "CTS")
+        self.assertEqual(dashboard["suites"][0]["version"], "16_r1")
 
     def test_nested_zip_is_scanned(self):
         nested = io.BytesIO()
