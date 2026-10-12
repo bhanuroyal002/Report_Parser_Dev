@@ -237,10 +237,10 @@ $("apaUploadBtn").addEventListener("click",async()=>{
     const blob=await response.blob();
     const url=URL.createObjectURL(blob);
     const link=document.createElement("a");
-    link.href=url;link.download="APA_upload_reports.zip";
+    link.href=url;link.download=response.headers.get("Content-Disposition")?.match(/filename="?([^";]+)"?/)?.[1]||"APA_reports.zip";
     document.body.appendChild(link);link.click();link.remove();
     setTimeout(()=>URL.revokeObjectURL(url),60000);
     $("statusMessage").textContent="APA upload package downloaded successfully.";
   }catch(error){alert(error.message)}
-  finally{b.disabled=!state.data;b.textContent="APA Upload Reports ↓"}
+  finally{b.disabled=!state.data;b.textContent="Download APA Upload Package ↓"}
 });
