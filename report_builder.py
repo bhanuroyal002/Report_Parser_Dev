@@ -111,7 +111,7 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em}.subtitle{margin-top:7px;color:
         return "".join(out)
 
     out.append("<section class='section'><div class='title'>Suite summary</div><div class='table-wrap'><table>"
-               "<thead><tr><th>Suite</th><th>Mods</th><th>Done</th><th>Incomplete Modules</th><th>Passed</th><th>Failed</th>"
+               "<thead><tr><th>Suite</th><th>Test Suite Version</th><th>Mods</th><th>Done</th><th>Incomplete Modules</th><th>Passed</th><th>Failed</th>"
                "<th>Assumption Failure</th><th>Ignored</th><th>Warnings</th><th>Total Tests</th></tr></thead><tbody>")
 
     for suite in suites:
@@ -120,7 +120,7 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em}.subtitle{margin-top:7px;color:
         inc = max(0, mods - done)
         failed_count = num(suite.get("failed"))
         out.append(
-            f"<tr><td><strong>{e(suite.get('name'))}</strong></td><td>{mods}</td><td>{done}</td>"
+            f"<tr><td><strong>{e(suite.get('name'))}</strong></td><td>{e(suite.get('version') or 'Not detected')}</td><td>{mods}</td><td>{done}</td>"
             f"<td class='{'pass-text' if inc == 0 else 'inc-text'}'>{inc}</td>"
             f"<td class='pass-text'>{num(suite.get('passed'))}</td>"
             f"<td class='{'pass-text' if failed_count == 0 else 'fail-text'}'>{failed_count}</td>"
