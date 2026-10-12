@@ -57,7 +57,6 @@ function render(){
     if(issuesEl) issuesEl.classList.add("hidden");
     $("publishBtn").disabled=false;
     $("viewBtn").disabled=false;
-    $("apaUploadBtn").disabled=false;
     return;
   }
   if(issuesEl) issuesEl.classList.remove("hidden");
@@ -82,7 +81,7 @@ function render(){
   $("failureCount").textContent=fail.length;
   $("incompleteList").innerHTML=inc.length?inc.map(x=>`<div class="issue-row"><strong>${esc(x.suite)} · ${esc(x.module)}</strong><small>${esc(x.reason||"Module incomplete")}</small></div>`).join(""):"<div class='empty'>No incomplete modules.</div>";
   $("failureList").innerHTML=fail.length?fail.map(x=>`<div class="issue-row"><strong>${esc(x.suite)} · ${esc(x.module)} · ${esc(x.testCase)}</strong><small>${esc(x.details||"No failure details recorded.")}</small></div>`).join(""):"<div class='empty'>No failures detected.</div>";
-  $("publishBtn").disabled=false;$("viewBtn").disabled=false;$("apaUploadBtn").disabled=false;
+  $("publishBtn").disabled=false;$("viewBtn").disabled=false;
 }
 $("reportFiles").addEventListener("change",e=>{
   // Keep previously selected files when the user adds files in later selections.
@@ -103,7 +102,7 @@ $("reportFiles").addEventListener("change",e=>{
 });
 $("clearBtn").addEventListener("click",()=>{
   state.files=[];state.data=null;$("reportFiles").value="";renderFiles();
-loadHistory();$("publishBtn").disabled=true;$("viewBtn").disabled=true;$("apaUploadBtn").disabled=true;
+loadHistory();$("publishBtn").disabled=true;$("viewBtn").disabled=true;
   $("statusMessage").textContent="";$("stats").innerHTML="";$("suiteGrid").innerHTML="";
   $("incompleteList").innerHTML="";$("failureList").innerHTML="";
   $("incompleteCount").textContent="0";$("failureCount").textContent="0";
@@ -221,26 +220,3 @@ $("publishBtn").addEventListener("click",async()=>{
 });
 renderFiles();
 loadHistory();
-$("apaUploadBtn").addEventListener("click",async()=>{
-  const b=$("apaUploadBtn");
-  if(!state.files.length){alert("Please upload and analyze reports first.");return}
-  b.disabled=true;b.textContent="Preparing APA package…";
-  try{
-    const fd=new FormData();
-    state.files.forEach(file=>fd.append("files",file,file.name));
-    const response=await fetch("/api/apa-upload",{method:"POST",body:fd});
-    if(!response.ok){
-      let message="Unable to package reports.";
-      try{const payload=await response.json();message=payload.error||message}catch(_){}
-      throw new Error(message);
-    }
-    const blob=await response.blob();
-    const url=URL.createObjectURL(blob);
-    const link=document.createElement("a");
-    link.href=url;link.download=response.headers.get("Content-Disposition")?.match(/filename="?([^";]+)"?/)?.[1]||"APA_reports.zip";
-    document.body.appendChild(link);link.click();link.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),60000);
-    $("statusMessage").textContent="APA upload package downloaded successfully.";
-  }catch(error){alert(error.message)}
-  finally{b.disabled=!state.data;b.textContent="Download APA Upload Package ↓"}
-});
