@@ -1,11 +1,8 @@
 import os
 import tempfile
-import zipfile
-from collections import Counter
 from pathlib import Path
-from werkzeug.utils import secure_filename
 
-from flask import Flask, after_this_request, jsonify, render_template, request, Response, send_file
+from flask import Flask, jsonify, render_template, request, Response
 from history import HistoryStore
 from parser import analyze_reports
 from report_builder import build_dashboard_html
@@ -158,106 +155,6 @@ def publish():
         },
     )
 
-
-
-@app.post("/api/apa-upload")
-def apa_upload():
-    """Package uploaded ZIP reports with suite-based filenames."""
-    files = request.files.getlist("files")
-    if not files:
-        return jsonify({"error": "Upload at least one report ZIP file."}), 400
-
-    temp_paths = []
-    output_path = None
-    try:
-        parsed_files = []
-        for uploaded in files:
-            if not uploaded.filename:
-                continue
-            if Path(uploaded.filename).suffix.lower() != ".zip":
-                return jsonify({"error": f"Only ZIP files are supported: {uploaded.filename}"}), 400
-            fd, temp_path = tempfile.mkstemp(prefix="gct-apa-source-", suffix=".zip")
-            temp_paths.append(temp_path)
-            written = 0
-            with os.fdopen(fd, "wb") as output:
-                while True:
-                    chunk_size = 1024 * 1024 if not MAX_FILE else min(1024 * 1024, MAX_FILE - written + 1)
-                    chunk = uploaded.stream.read(chunk_size)
-                    if not chunk:
-                        break
-                    written += len(chunk)
-                    if MAX_FILE and written > MAX_FILE:
-                        return jsonify({"error": f"{uploaded.filename} exceeds the configured {MAX_FILE_MB} MB file limit."}), 413
-                    output.write(chunk)
-            parsed_files.append((uploaded.filename, temp_path))
-
-        if not parsed_files:
-            return jsonify({"error": "Upload at least one report ZIP file."}), 400
-
-        named = []
-        project_name = ""
-        sw_version = ""
-        for original_name, path in parsed_files:
-            detected = analyze_reports([(original_name, path)])
-            suite_names = list(dict.fromkeys(str(item.get("name") or "").strip() for item in detected.get("suites", []) if str(item.get("name") or "").strip()))
-            suite = "_".join(suite_names) if suite_names else "UnknownSuite"
-            suite = secure_filename(suite.replace(" ", "_")) or "UnknownSuite"
-            named.append((suite, path))
-
-            builds = detected.get("builds") or []
-            fingerprint = str((builds[0].get("fingerprint") if builds else detected.get("buildFingerprint")) or "").strip()
-            if fingerprint and fingerprint != "Not detected" and not detected.get("overall", {}).get("fingerprintMismatch"):
-                parts = fingerprint.split("/")
-                if not project_name and parts:
-                    project_name = secure_filename(parts[0].replace(" ", "_"))
-                # The SW version is the fingerprint component immediately before
-                # user/release-keys, i.e. the part ending in :user. Some projects
-                # include a -SW- prefix and others do not.
-                if len(parts) >= 2:
-                    candidate = parts[-2].split(":", 1)[0]
-                    marker = "-SW-"
-                    if marker in candidate:
-                        candidate = candidate.split(marker, 1)[1]
-                    if candidate and any(ch.isdigit() for ch in candidate):
-                        sw_version = secure_filename(candidate.replace(" ", "_"))
-
-        project_name = project_name or "UnknownProject"
-        sw_version = sw_version or "UnknownSWVersion"
-
-        totals = Counter(suite for suite, _ in named)
-        seen = Counter()
-        output_names = []
-        for suite, path in named:
-            seen[suite] += 1
-            filename = f"{suite}_report.zip" if totals[suite] == 1 else f"{suite}_report{seen[suite]}.zip"
-            output_names.append((filename, path))
-
-        fd, output_path = tempfile.mkstemp(prefix="gct-apa-upload-", suffix=".zip")
-        os.close(fd)
-        with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as package:
-            for archive_name, path in output_names:
-                package.write(path, arcname=archive_name)
-
-        @after_this_request
-        def remove_package(response):
-            try:
-                os.unlink(output_path)
-            except OSError:
-                pass
-            return response
-
-        return send_file(output_path, mimetype="application/zip", as_attachment=True, download_name=f"{project_name}_{sw_version}_APA_reports.zip", conditional=True)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-    except Exception:
-        app.logger.exception("APA report packaging failed")
-        return jsonify({"error": "Unable to package the uploaded reports. Check the application logs."}), 500
-    finally:
-        for path in temp_paths:
-            try:
-                os.unlink(path)
-            except OSError:
-                pass
 
 
 @app.errorhandler(413)
