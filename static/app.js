@@ -21,9 +21,11 @@ function render(){
   $("buildFingerprint").textContent=fingerprintMismatch?"MULTIPLE BUILDS DETECTED":(primaryBuild.fingerprint||d.buildFingerprint||"Not detected");
   $("securityPatch").textContent=fingerprintMismatch?"MULTIPLE":(primaryBuild.securityPatch||d.securityPatch||"Not detected");
   $("androidVersion").textContent=fingerprintMismatch?"MULTIPLE":(primaryBuild.androidVersion||d.androidVersion||"Not detected");
+  const suiteVersions=[...new Set(s.map(x=>String(x.version||"").trim()).filter(Boolean))];
+  $("testSuiteVersion").textContent=suiteVersions.length===0?"Not detected":(suiteVersions.length===1?suiteVersions[0]:"MULTIPLE");
 
   $("buildMismatch").innerHTML=fingerprintMismatch?(
-    `<div class="mismatch-panel"><div class="panel-title"><div><span class="section-kicker">BUILD MISMATCH</span><h3>Build information</h3></div><span class="count-badge danger">${format(builds.length)} builds</span></div><p>Reports with the same build fingerprint are grouped into one build entry.</p><div class="fingerprint-table">${builds.map((x,i)=>`<div class="fingerprint-row"><strong>Build ${String.fromCharCode(65+i)}</strong><span><b>Suite:</b> ${esc((x.suites||[]).join(", ")||"Not detected")}<br><b>Fingerprint:</b> ${esc(x.fingerprint||"Not detected")}<br><b>Android:</b> ${esc(x.androidVersion||"Not detected")}<br><b>Security Patch:</b> ${esc(x.securityPatch||"Not detected")}<br><b>Build ID:</b> ${esc(x.buildId||"Not detected")}<br><b>SDK:</b> ${esc(x.sdk||"Not detected")}<br><b>Architecture:</b> ${esc(x.abis||"Not detected")}</span></div>`).join("")}</div></div>`
+    `<div class="mismatch-panel"><div class="panel-title"><div><span class="section-kicker">BUILD MISMATCH</span><h3>Build information</h3></div><span class="count-badge danger">${format(builds.length)} builds</span></div><p>Reports with the same build fingerprint are grouped into one build entry.</p><div class="fingerprint-table">${builds.map((x,i)=>`<div class="fingerprint-row"><strong>Build ${String.fromCharCode(65+i)}</strong><span><b>Suite:</b> ${esc((x.suites||[]).join(", ")||"Not detected")}<br><b>Test Suite Version:</b> ${esc((s.filter(item=>(x.suites||[]).includes(item.name)).map(item=>item.version).filter(Boolean).join(", "))||"Not detected")}<br><b>Fingerprint:</b> ${esc(x.fingerprint||"Not detected")}<br><b>Android:</b> ${esc(x.androidVersion||"Not detected")}<br><b>Security Patch:</b> ${esc(x.securityPatch||"Not detected")}<br><b>Build ID:</b> ${esc(x.buildId||"Not detected")}<br><b>SDK:</b> ${esc(x.sdk||"Not detected")}<br><b>Architecture:</b> ${esc(x.abis||"Not detected")}</span></div>`).join("")}</div></div>`
   ):"";
 
   $("buildInfoCard").innerHTML=fingerprintMismatch?"":`
@@ -35,6 +37,7 @@ function render(){
       <div class="build-info-grid">
         <div class="build-info-item wide"><span>Build Fingerprint</span><strong>${esc(primaryBuild.fingerprint||d.buildFingerprint||"Not detected")}</strong></div>
         <div class="build-info-item"><span>Android Version</span><strong>${esc(primaryBuild.androidVersion||d.androidVersion||"Not detected")}</strong></div>
+        <div class="build-info-item"><span>Test Suite Version</span><strong>${esc(suiteVersions.length===0?"Not detected":suiteVersions.join(", "))}</strong></div>
         <div class="build-info-item"><span>Security Patch</span><strong>${esc(primaryBuild.securityPatch||d.securityPatch||"Not detected")}</strong></div>
         <div class="build-info-item"><span>Build ID</span><strong>${esc(primaryBuild.buildId||"Not detected")}</strong></div>
         <div class="build-info-item"><span>SDK Version</span><strong>${esc(primaryBuild.sdk||"Not detected")}</strong></div>
@@ -73,7 +76,7 @@ function render(){
 
   $("suiteGrid").innerHTML=s.map(x=>{
     const p=x.modules?Math.round(x.completedModules/x.modules*100):0;
-    return `<article class="suite"><div class="suite-top"><div class="suite-title"><h3>${esc(x.name)}</h3></div><span class="pill ${x.status==="COMPLETED"?"ok":"warn"}">${esc(x.status)}</span></div><div class="suite-number">${format(x.completedModules)} / ${format(x.modules)} modules</div><div class="progress"><i style="width:${p}%"></i></div><div class="suite-meta"><span>${p}% complete</span><span>${format(x.testCases)} total tests</span></div><div class="suite-fails"><span class="good">${format(x.passed)} passed</span> · <span class="bad">${format(x.failed)} failed</span> · ${format(x.assumptionFailures)} assumption failure · ${format(x.ignored)} ignored · ${format(x.warnings)} warnings</div></article>`;
+    return `<article class="suite"><div class="suite-top"><div class="suite-title"><h3>${esc(x.name)}</h3></div><span class="pill ${x.status==="COMPLETED"?"ok":"warn"}">${esc(x.status)}</span></div><div class="suite-number">${format(x.completedModules)} / ${format(x.modules)} modules</div><div class="progress"><i style="width:${p}%"></i></div><div class="suite-meta"><span>${p}% complete</span><span>${format(x.testCases)} total tests</span></div><div class="suite-version"><span>Test Suite Version</span><strong>${esc(x.version||"Not detected")}</strong></div><div class="suite-fails"><span class="good">${format(x.passed)} passed</span> · <span class="bad">${format(x.failed)} failed</span> · ${format(x.assumptionFailures)} assumption failure · ${format(x.ignored)} ignored · ${format(x.warnings)} warnings</div></article>`;
   }).join("");
 
   $("incompleteCount").textContent=inc.length;
@@ -110,6 +113,7 @@ loadHistory();$("publishBtn").disabled=true;$("viewBtn").disabled=true;
   $("readiness").textContent="WAITING FOR REPORTS";$("readiness").className="readiness-chip";
   $("buildFingerprint").textContent="Not detected";
   $("androidVersion").textContent="Not detected";
+  $("testSuiteVersion").textContent="Not detected";
   $("securityPatch").textContent="Not detected";
   const issuesEl=document.querySelector(".issues-grid");
   if(issuesEl) issuesEl.classList.add("hidden");
