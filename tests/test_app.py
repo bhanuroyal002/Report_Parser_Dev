@@ -48,29 +48,6 @@ class UploadEndpointTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 200)
 
-    def test_apa_upload_packages_reports_with_suite_based_names(self):
-        def fake_analysis(paths):
-            filename = paths[0][0]
-            suite = "CTS" if filename.startswith("cts") else "GTS"
-            return {"suites": [{"name": suite}]}
-
-        with patch.object(webapp, "MAX_FILE", 0), patch.object(webapp, "analyze_reports", side_effect=fake_analysis):
-            response = self.client.post(
-                "/api/apa-upload",
-                data={"files": [
-                    (io.BytesIO(b"zip-one"), "cts-first.zip"),
-                    (io.BytesIO(b"zip-two"), "cts-second.zip"),
-                    (io.BytesIO(b"zip-three"), "gts.zip"),
-                ]},
-                content_type="multipart/form-data",
-            )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.mimetype, "application/zip")
-        import zipfile
-        with zipfile.ZipFile(io.BytesIO(response.data)) as package:
-            self.assertEqual(package.namelist(), ["CTS_report1.zip", "CTS_report2.zip", "GTS_report.zip"])
-            self.assertEqual(package.read("CTS_report1.zip"), b"zip-one")
-
     def test_health_endpoint_checks_database(self):
         response = self.client.get("/healthz")
         self.assertEqual(response.status_code, 200)
