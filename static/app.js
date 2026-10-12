@@ -22,7 +22,6 @@ function render(){
   $("securityPatch").textContent=fingerprintMismatch?"MULTIPLE":(primaryBuild.securityPatch||d.securityPatch||"Not detected");
   $("androidVersion").textContent=fingerprintMismatch?"MULTIPLE":(primaryBuild.androidVersion||d.androidVersion||"Not detected");
   const suiteVersions=[...new Set(s.map(x=>String(x.version||"").trim()).filter(Boolean))];
-  $("testSuiteVersion").textContent=suiteVersions.length===0?"Not detected":(suiteVersions.length===1?suiteVersions[0]:"MULTIPLE");
 
   $("buildMismatch").innerHTML=fingerprintMismatch?(
     `<div class="mismatch-panel"><div class="panel-title"><div><span class="section-kicker">BUILD MISMATCH</span><h3>Build information</h3></div><span class="count-badge danger">${format(builds.length)} builds</span></div><p>Reports with the same build fingerprint are grouped into one build entry.</p><div class="fingerprint-table">${builds.map((x,i)=>`<div class="fingerprint-row"><strong>Build ${String.fromCharCode(65+i)}</strong><span><b>Suite:</b> ${esc((x.suites||[]).join(", ")||"Not detected")}<br><b>Test Suite Version:</b> ${esc((s.filter(item=>(x.suites||[]).includes(item.name)&&item.fingerprint===x.fingerprint).map(item=>item.version).filter(Boolean).join(", "))||"Not detected")}<br><b>Fingerprint:</b> ${esc(x.fingerprint||"Not detected")}<br><b>Android:</b> ${esc(x.androidVersion||"Not detected")}<br><b>Security Patch:</b> ${esc(x.securityPatch||"Not detected")}<br><b>Build ID:</b> ${esc(x.buildId||"Not detected")}<br><b>SDK:</b> ${esc(x.sdk||"Not detected")}<br><b>Architecture:</b> ${esc(x.abis||"Not detected")}</span></div>`).join("")}</div></div>`
@@ -113,7 +112,6 @@ loadHistory();$("publishBtn").disabled=true;$("viewBtn").disabled=true;
   $("readiness").textContent="WAITING FOR REPORTS";$("readiness").className="readiness-chip";
   $("buildFingerprint").textContent="Not detected";
   $("androidVersion").textContent="Not detected";
-  $("testSuiteVersion").textContent="Not detected";
   $("securityPatch").textContent="Not detected";
   const issuesEl=document.querySelector(".issues-grid");
   if(issuesEl) issuesEl.classList.add("hidden");
