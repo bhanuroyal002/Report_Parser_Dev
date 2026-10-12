@@ -195,12 +195,28 @@ def apa_upload():
             return jsonify({"error": "Upload at least one report ZIP file."}), 400
 
         named = []
+        project_name = ""
+        sw_version = ""
         for original_name, path in parsed_files:
             detected = analyze_reports([(original_name, path)])
             suite_names = list(dict.fromkeys(str(item.get("name") or "").strip() for item in detected.get("suites", []) if str(item.get("name") or "").strip()))
             suite = "_".join(suite_names) if suite_names else "UnknownSuite"
             suite = secure_filename(suite.replace(" ", "_")) or "UnknownSuite"
             named.append((suite, path))
+
+            builds = detected.get("builds") or []
+            fingerprint = str((builds[0].get("fingerprint") if builds else detected.get("buildFingerprint")) or "").strip()
+            if fingerprint and fingerprint != "Not detected" and not detected.get("overall", {}).get("fingerprintMismatch"):
+                parts = fingerprint.split("/")
+                if not project_name and parts:
+                    project_name = secure_filename(parts[0].replace(" ", "_"))
+                if len(parts) >= 2:
+                    version_part = parts[-1].split(":", 1)[0]
+                    if version_part and any(ch.isdigit() for ch in version_part):
+                        sw_version = secure_filename(version_part.replace(" ", "_"))
+
+        project_name = project_name or "UnknownProject"
+        sw_version = sw_version or "UnknownSWVersion"
 
         totals = Counter(suite for suite, _ in named)
         seen = Counter()
@@ -224,7 +240,7 @@ def apa_upload():
                 pass
             return response
 
-        return send_file(output_path, mimetype="application/zip", as_attachment=True, download_name="APA_upload_reports.zip", conditional=True)
+        return send_file(output_path, mimetype="application/zip", as_attachment=True, download_name=f"{project_name}_{sw_version}_APA_reports.zip", conditional=True)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception:
