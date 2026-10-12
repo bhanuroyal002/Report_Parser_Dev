@@ -85,7 +85,7 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em}.subtitle{margin-top:7px;color:
     if fingerprint_mismatch and builds:
         out.append("<div class='table-wrap'><table><thead><tr><th>Build</th><th>Suite</th><th>Test Suite Version</th><th>Fingerprint</th><th>Android Version</th><th>Security Patch</th></tr></thead><tbody>")
         for i, build in enumerate(builds):
-            suite_versions = [text(suite.get("version")) for suite in suites if suite.get("name") in (build.get("suites") or []) and text(suite.get("version"))]
+            suite_versions = [text(suite.get("version")) for suite in suites if suite.get("name") in (build.get("suites") or []) and suite.get("fingerprint") == build.get("fingerprint") and text(suite.get("version"))]
             suite_version_text = ", ".join(dict.fromkeys(suite_versions)) or "Not detected"
             out.append(
                 f"<tr><td><strong>Build {chr(65+i)}</strong></td>"
