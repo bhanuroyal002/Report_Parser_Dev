@@ -42,7 +42,7 @@ def jira_markup(item):
     matches = maps(item.get("jiraMatches"))
     if not matches:
         status = text(item.get("jiraLookupStatus"))
-        message = "Jira lookup failed; report analysis is still available." if status == "error" else "No matching Jira issue found."
+        message = ("Jira lookup failed; report analysis is still available." if status == "error" else "Jira lookup was not configured for this run." if status == "not_configured" else "Jira history was not stored for this analysis run." if not status else "No matching Jira issue found.")
         return f"<div class='jira-empty'>{e(message)}</div>"
     blocks = ["<div class='jira-matches'><strong>Jira history</strong>"]
     for issue in matches:
