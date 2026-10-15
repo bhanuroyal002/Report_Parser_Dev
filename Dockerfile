@@ -11,7 +11,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     useradd --system --uid 10001 --create-home --home-dir /home/reportparser reportparser
-COPY --chown=10001:10001 app.py parser.py history.py report_builder.py gunicorn.conf.py ./
+COPY --chown=10001:10001 app.py parser.py history.py report_builder.py jira_client.py gunicorn.conf.py ./
 COPY --chown=10001:10001 templates/ ./templates/
 COPY --chown=10001:10001 static/ ./static/
 COPY tests/ ./tests/
