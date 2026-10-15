@@ -303,7 +303,7 @@ class JiraClient:
                 for issue in self._search(unique_terms[offset:offset + MAX_SEARCH_TERMS]):
                     if issue.get("key"):
                         candidates[issue["key"]] = issue
-        except JiraRequestError as exc:
+        except (JiraRequestError, JiraConfigurationError) as exc:
             dashboard["jiraIntegration"] = {
                 "configured": True, "status": "error", "message": str(exc),
                 "matchedIssues": 0,
