@@ -14,6 +14,7 @@ function jiraMatchesMarkup(item){
     }).join('')+'</div>';
   }
   if(item.jiraLookupStatus==='error') return '<div class="jira-empty">Jira lookup failed; report analysis is still available.</div>';
+  if(!item.jiraLookupStatus) return '<div class="jira-empty">Jira history was not stored for this analysis run.</div>';
   if(item.jiraLookupStatus==='no_match') return '<div class="jira-empty">No matching Jira issue found.</div>';
   const jira=state.data&&state.data.jiraIntegration;
   if(!jira||!jira.configured) return '<div class="jira-empty">Jira lookup not configured.</div>';
