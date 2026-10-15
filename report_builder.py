@@ -38,6 +38,33 @@ def join_values(value):
     return text(value)
 
 
+def jira_markup(item):
+    matches = maps(item.get("jiraMatches"))
+    if not matches:
+        status = text(item.get("jiraLookupStatus"))
+        message = ("Jira lookup failed; report analysis is still available." if status == "error" else "Jira lookup was not configured for this run." if status == "not_configured" else "Jira history was not stored for this analysis run." if not status else "No matching Jira issue found.")
+        return f"<div class='jira-empty'>{e(message)}</div>"
+    blocks = ["<div class='jira-matches'><strong>Jira history</strong>"]
+    for issue in matches:
+        blocks.append(
+            f"<div class='jira-match'><a href='{e(issue.get('url'))}' target='_blank' rel='noopener noreferrer'>"
+            f"<strong>{e(issue.get('key'))}</strong></a> {e(issue.get('summary'))}"
+            f"<div class='jira-meta'><span>{e(issue.get('status') or 'Unknown')}</span>"
+            f"<span>{e(issue.get('resolution') or 'Unresolved')}</span>"
+            f"<span>{e(issue.get('confidence') or '')} confidence</span></div>"
+            f"<div class='jira-meta'><span>Created: {e(issue.get('created') or 'Unknown')}</span>"
+            f"<span>Updated: {e(issue.get('updated') or 'Unknown')}</span></div>"
+        )
+        history = maps(issue.get("statusHistory"))
+        if history:
+            blocks.append("<details><summary>Status history</summary><ul>")
+            for event in history[:5]:
+                blocks.append(f"<li>{e(event.get('from'))} → {e(event.get('to'))} <small>{e(event.get('date'))}</small></li>")
+            blocks.append("</ul></details>")
+        blocks.append("</div>")
+    blocks.append("</div>")
+    return "".join(blocks)
+
 def field(label, value):
     return f"<div class='field'><label>{e(label)}</label><strong>{e(value)}</strong></div>"
 
@@ -66,7 +93,7 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em}.subtitle{margin-top:7px;color:
 .section{background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:12px;margin-top:16px;padding:22px;box-shadow:0 5px 18px rgba(23,37,84,.05)}.title{font-weight:900;font-size:14px;margin-bottom:16px;padding-left:12px;border-left:4px solid var(--blue);color:var(--navy)}
 .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.field{border:1px solid var(--line);border-top:3px solid var(--cyan);border-radius:9px;padding:13px 14px;background:linear-gradient(180deg,#fff,#f8fbff)}.field:nth-child(2){border-top-color:var(--purple)}.field:nth-child(3){border-top-color:var(--orange)}.field label{display:block;color:var(--muted);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px}.field strong{font-size:13px;word-break:break-word;line-height:1.45}
 .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:9px}table{width:100%;border-collapse:collapse;background:#fff}th{background:linear-gradient(90deg,#eaf2ff,#f2edff);text-align:left;font-size:10px;text-transform:uppercase;color:#475467;padding:12px;white-space:nowrap}td{padding:12px;border-bottom:1px solid #edf0f5}tbody tr:nth-child(even){background:#fafcff}.pass-text{color:var(--green);font-weight:900}.fail-text{color:var(--red);font-weight:900}.inc-text{color:var(--amber);font-weight:900}
-.issue{padding:13px 14px;margin:8px 0;border:1px solid #e5eaf2;border-left:4px solid var(--red);border-radius:8px;background:#fffafa}.issue strong{display:block;line-height:1.45}.issue span{display:block;color:var(--muted);margin-top:5px;font-size:12px;line-height:1.45}.empty{color:var(--green);background:var(--greenbg);border:1px solid #b9ead5;padding:13px;border-radius:8px;font-weight:800}.footer{text-align:center;color:var(--muted);font-size:11px;line-height:1.7;margin-top:26px;padding:10px 0}
+.issue{padding:13px 14px;margin:8px 0;border:1px solid #e5eaf2;border-left:4px solid var(--red);border-radius:8px;background:#fffafa}.issue strong{display:block;line-height:1.45}.issue span{display:block;color:var(--muted);margin-top:5px;font-size:12px;line-height:1.45}.empty{color:var(--green);background:var(--greenbg);border:1px solid #b9ead5;padding:13px;border-radius:8px;font-weight:800}.jira-matches{margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}.jira-match{padding:9px 10px;margin-top:7px;border:1px solid var(--line);border-radius:7px;background:#fff}.jira-match a{color:var(--blue);text-decoration:none}.jira-meta{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:11px;margin-top:6px}.jira-empty{margin-top:8px;color:var(--muted);font-size:12px}.jira-match details{margin-top:7px;color:var(--muted);font-size:11px}.jira-match ul{margin:5px 0;padding-left:18px}.footer{text-align:center;color:var(--muted);font-size:11px;line-height:1.7;margin-top:26px;padding:10px 0}
 @media(max-width:700px){.header{display:block}.status{display:inline-block;margin-top:16px}.summary{grid-template-columns:1fr}.wrap{padding:15px 10px}.section{padding:16px}}@media print{body{background:#fff}.wrap{max-width:none;padding:0}.section,.header{break-inside:avoid;box-shadow:none}}
 """
 
@@ -132,6 +159,13 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em}.subtitle{margin-top:7px;color:
         )
     out.append("</tbody></table></div></section>")
 
+    jira = dashboard.get("jiraIntegration") if isinstance(dashboard.get("jiraIntegration"), dict) else {}
+    jira_message = text(jira.get("message")) or "Jira lookup is optional and can be configured on the server."
+    out.append(f"<section class='section'><div class='title'>Jira history lookup</div><div>{e(jira_message)}</div>")
+    if jira.get("checkedFindings") is not None:
+        out.append(f"<div class='jira-meta'><span>Findings checked: {num(jira.get('checkedFindings'))}</span><span>Unique issues matched: {num(jira.get('matchedIssues'))}</span></div>")
+    out.append("</section>")
+
     out.append("<section class='section'><div class='title'>Incomplete modules</div>")
     if not incomplete:
         out.append("<div class='empty'>No incomplete modules.</div>")
@@ -140,6 +174,7 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em}.subtitle{margin-top:7px;color:
             out.append(
                 f"<div class='issue'><strong>{e(item.get('suite'))} {e(item.get('module'))}</strong>"
                 f"<span>{e(item.get('reason') or 'Module incomplete')}</span>"
+                f"{jira_markup(item)}"
             )
             out.append("</div>")
     out.append("</section>")
@@ -153,6 +188,7 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em}.subtitle{margin-top:7px;color:
                 f"<div class='issue'><strong> - {e(failure.get('suite'))} "
                 f"{e(failure.get('module'))} :: {e(failure.get('testCase'))}</strong>"
                 f"<span>{e(failure.get('details') or 'No failure details recorded.')}</span>"
+                f"{jira_markup(failure)}"
             )
             out.append("</div>")
     out.append("</section>")

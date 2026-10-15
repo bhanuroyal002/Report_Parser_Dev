@@ -11,6 +11,7 @@ Repository: [bhanuroyal002/Report_Parser_Dev](https://github.com/bhanuroyal002/R
 - Detects the test suite from XML `suite_name` and `suite_plan` metadata, including CTS-on-GSI and CTS Verifier mappings.
 - Summarizes suite completion, module progress, test outcomes, failures, and build metadata such as fingerprint, Android release, and security patch.
 - Identifies incomplete modules and failed test cases for follow-up.
+- Optionally searches Jira Cloud for likely historical defects and embeds issue status/history in the live and standalone dashboards.
 - Combines compatible reports and reconciles repeated test records.
 - Detects inconsistent build fingerprints and avoids presenting potentially misleading aggregate test totals for mismatched builds.
 - Saves recent analysis runs in SQLite and lets users reopen prior results.
@@ -33,6 +34,22 @@ Repository: [bhanuroyal002/Report_Parser_Dev](https://github.com/bhanuroyal002/R
 - If a test is repeated across compatible reports, a passing execution takes precedence over a failing execution in the merged result.
 - A report is interpreted as Android Tradefed output. Arbitrary XML formats are not guaranteed to be supported.
 
+## Optional Jira Cloud integration (read-only)
+
+Jira enrichment is optional. When configured, each analysis searches Jira Cloud issues visible to the configured account and adds likely historical matches to failed test cases and incomplete modules. The dashboard shows issue key, summary, status, resolution, created/updated dates, and recent status transitions when Jira provides changelog data. Matches are labelled with confidence; the integration does not create, edit, comment on, or transition Jira issues.
+
+Configure these values in the server's protected `.env` file (do not commit real credentials):
+
+```dotenv
+JIRA_BASE_URL=https://your-domain.atlassian.net
+JIRA_EMAIL=service-account@example.com
+JIRA_API_TOKEN=replace-with-a-Jira-Cloud-API-token
+```
+
+Use a dedicated Jira account with only the read permissions needed. Search is not restricted to a project key; Jira itself returns only issues the account is allowed to browse. Keep the API token secret and rotate it according to your organization's policy. Rebuild/redeploy the container after changing Compose configuration.
+
+If the variables are absent, the report parser works as before and marks Jira lookup as not configured. If Jira is temporarily unavailable or returns an error, the report analysis still completes; Jira matches may be omitted for that run. Matching is heuristic and should be reviewed before treating a historical issue as the same defect.
+
 ## Technology stack
 
 | Area | Technology |
@@ -54,6 +71,7 @@ Report_Parser_Dev/
 ├── parser.py                           # Tradefed XML/ZIP parsing, merge, and build checks
 ├── history.py                          # SQLite persistence for recent analysis runs
 ├── report_builder.py                   # Standalone HTML dashboard generator
+├── jira_client.py                      # Optional read-only Jira Cloud issue/history lookup
 ├── templates/
 │   └── index.html                      # Main application page
 ├── static/
@@ -61,6 +79,7 @@ Report_Parser_Dev/
 │   └── style.css                       # UI styling
 ├── tests/
 │   ├── test_app.py                     # Flask endpoint tests
+│   ├── test_jira_client.py              # Jira matching and history tests
 │   └── test_parser.py                  # Parser regression tests
 ├── deploy/
 │   ├── install-server.sh               # Initial Linux/Docker setup
@@ -208,7 +227,7 @@ python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
 ```
 
-The test suite covers application endpoints and core parser cases, including nested ZIP discovery, build-fingerprint mismatch handling, incomplete modules, invalid ZIPs, and upload-size behavior. The Docker build runs the regression tests before the image is finalized.
+The test suite covers application endpoints, Jira matching/history behavior, and core parser cases, including nested ZIP discovery, build-fingerprint mismatch handling, incomplete modules, invalid ZIPs, and upload-size behavior. The Docker build runs the regression tests before the image is finalized.
 
 ## CI/CD and server deployment
 

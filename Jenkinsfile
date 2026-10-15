@@ -37,11 +37,13 @@ pipeline {
                 sh '''
                     set -eux
                     python3 --version
-                    python3 -m py_compile app.py parser.py history.py report_builder.py tests/test_parser.py tests/test_app.py
+                    python3 -m py_compile app.py parser.py history.py report_builder.py jira_client.py tests/test_parser.py tests/test_app.py tests/test_jira_client.py
                     bash -n deploy/install-server.sh deploy/report-parser-deploy.sh deploy/report-parser-healthcheck.sh
                     test -d tests
                     test -f tests/test_parser.py
                     test -f tests/test_app.py
+                    test -f tests/test_jira_client.py
+                    test -f jira_client.py
                     test -f deploy/report-parser-deploy.sh
                     test -f requirements.txt
                     test -f Dockerfile

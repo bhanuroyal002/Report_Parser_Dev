@@ -23,6 +23,9 @@ services:
       MAX_ZIP_ENTRIES: "${MAX_ZIP_ENTRIES:-0}"
       WEB_CONCURRENCY: "${WEB_CONCURRENCY:-2}"
       GUNICORN_TIMEOUT: "${GUNICORN_TIMEOUT:-900}"
+      JIRA_BASE_URL: "${JIRA_BASE_URL:-}"
+      JIRA_EMAIL: "${JIRA_EMAIL:-}"
+      JIRA_API_TOKEN: "${JIRA_API_TOKEN:-}"
     volumes:
       - /opt/report_parser/data:/app/data
     healthcheck:
