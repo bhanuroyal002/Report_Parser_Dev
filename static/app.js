@@ -5,6 +5,26 @@ const formatBytes=b=>{const n=Number(b||0);if(n<1024)return n+' B';if(n<1048576)
 function setProgress(percent,title,detail,indeterminate=false){const box=$("analysisProgress");box.classList.remove("hidden");$("progressTitle").textContent=title;$("progressDetail").textContent=detail;$("progressPercent").textContent=indeterminate?"":percent+"%";$("progressBar").style.width=indeterminate?"35%":Math.max(0,Math.min(100,percent))+"%";$("progressTrack").classList.toggle("indeterminate",indeterminate)}
 function hideProgress(){clearInterval(state.progressTimer);state.progressTimer=null;$("analysisProgress").classList.add("hidden");$("progressTrack").classList.remove("indeterminate")}
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function jiraMatchesMarkup(item){
+  const matches=Array.isArray(item.jiraMatches)?item.jiraMatches:[];
+  if(matches.length){
+    return '<div class="jira-matches"><strong>Jira history</strong>'+matches.map(function(issue){
+      const history=(issue.statusHistory||[]).slice(0,3).map(function(h){return '<li>'+esc(h.from)+' → '+esc(h.to)+' <small>'+esc(h.date||'')+'</small></li>';}).join('');
+      return '<div class="jira-match"><a href="'+esc(issue.url)+'" target="_blank" rel="noopener noreferrer"><strong>'+esc(issue.key)+'</strong></a> '+esc(issue.summary||'')+'<div class="jira-meta"><span>'+esc(issue.status||'Unknown')+'</span><span>'+esc(issue.resolution||'Unresolved')+'</span><span>'+esc(issue.confidence||'')+' confidence</span></div>'+(issue.updated?'<small>Updated '+esc(issue.updated)+'</small>':'')+(history?'<details><summary>Status history</summary><ul>'+history+'</ul></details>':'')+'</div>';
+    }).join('')+'</div>';
+  }
+  if(item.jiraLookupStatus==='error') return '<div class="jira-empty">Jira lookup failed; report analysis is still available.</div>';
+  if(item.jiraLookupStatus==='no_match') return '<div class="jira-empty">No matching Jira issue found.</div>';
+  const jira=state.data&&state.data.jiraIntegration;
+  if(!jira||!jira.configured) return '<div class="jira-empty">Jira lookup not configured.</div>';
+  return '<div class="jira-empty">No matching Jira issue found.</div>';
+}
+function renderJiraStatus(){
+  const target=$("jiraStatus");if(!target)return;
+  const jira=state.data&&state.data.jiraIntegration||{};
+  target.innerHTML='<strong>Jira history · '+esc(jira.status||'not configured')+'</strong><p>'+esc(jira.message||'Configure Jira Cloud credentials on the server to look up existing issues.')+(jira.checkedFindings!==undefined?' Checked '+format(jira.checkedFindings)+' findings · '+format(jira.matchedIssues||0)+' unique matching issues.':'')+'</p>';
+  target.classList.toggle('jira-status-error',jira.status==='error');
+}
 function renderFiles(){
   const total=state.files.reduce((sum,f)=>sum+f.size,0);
   $("selectedFiles").innerHTML=state.files.map(f=>`<span class="file-chip">${esc(f.name)} <small>${formatBytes(f.size)}</small></span>`).join("");
@@ -79,8 +99,9 @@ function render(){
 
   $("incompleteCount").textContent=inc.length;
   $("failureCount").textContent=fail.length;
-  $("incompleteList").innerHTML=inc.length?inc.map(x=>`<div class="issue-row"><strong>${esc(x.suite)} · ${esc(x.module)}</strong><small>${esc(x.reason||"Module incomplete")}</small></div>`).join(""):"<div class='empty'>No incomplete modules.</div>";
-  $("failureList").innerHTML=fail.length?fail.map(x=>`<div class="issue-row"><strong>${esc(x.suite)} · ${esc(x.module)} · ${esc(x.testCase)}</strong><small>${esc(x.details||"No failure details recorded.")}</small></div>`).join(""):"<div class='empty'>No failures detected.</div>";
+  renderJiraStatus();
+  $("incompleteList").innerHTML=inc.length?inc.map(x=>`<div class="issue-row"><strong>${esc(x.suite)} · ${esc(x.module)}</strong><small>${esc(x.reason||"Module incomplete")}</small>${jiraMatchesMarkup(x)}</div>`).join(""):"<div class='empty'>No incomplete modules.</div>";
+  $("failureList").innerHTML=fail.length?fail.map(x=>`<div class="issue-row"><strong>${esc(x.suite)} · ${esc(x.module)} · ${esc(x.testCase)}</strong><small>${esc(x.details||"No failure details recorded.")}</small>${jiraMatchesMarkup(x)}</div>`).join(""):"<div class='empty'>No failures detected.</div>";
   $("publishBtn").disabled=false;$("viewBtn").disabled=false;
 }
 $("reportFiles").addEventListener("change",e=>{
