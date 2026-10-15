@@ -270,6 +270,9 @@ class JiraClient:
                 "message": "Jira lookup is optional. Configure the Jira Cloud environment variables to show issue history.",
                 "matchedIssues": 0,
             }
+            for item in failures + incomplete:
+                item["jiraMatches"] = []
+                item["jiraLookupStatus"] = "not_configured"
             return dashboard
 
         findings = [("failure", item) for item in failures] + [("incomplete", item) for item in incomplete]
