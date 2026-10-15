@@ -285,12 +285,8 @@ class JiraClient:
             return dashboard
 
         all_terms = []
-        terms_by_finding = {}
         for kind, item in findings:
-            identity = (kind, id(item))
-            terms = _terms_for_finding(item, kind)
-            terms_by_finding[identity] = terms
-            all_terms.extend(terms)
+            all_terms.extend(_terms_for_finding(item, kind))
         unique_terms = []
         seen = set()
         for term in all_terms:
