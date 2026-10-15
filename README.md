@@ -71,6 +71,7 @@ Report_Parser_Dev/
 ├── parser.py                           # Tradefed XML/ZIP parsing, merge, and build checks
 ├── history.py                          # SQLite persistence for recent analysis runs
 ├── report_builder.py                   # Standalone HTML dashboard generator
+├── jira_client.py                      # Optional read-only Jira Cloud issue/history lookup
 ├── templates/
 │   └── index.html                      # Main application page
 ├── static/
@@ -78,6 +79,7 @@ Report_Parser_Dev/
 │   └── style.css                       # UI styling
 ├── tests/
 │   ├── test_app.py                     # Flask endpoint tests
+│   ├── test_jira_client.py              # Jira matching and history tests
 │   └── test_parser.py                  # Parser regression tests
 ├── deploy/
 │   ├── install-server.sh               # Initial Linux/Docker setup
@@ -225,7 +227,7 @@ python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
 ```
 
-The test suite covers application endpoints and core parser cases, including nested ZIP discovery, build-fingerprint mismatch handling, incomplete modules, invalid ZIPs, and upload-size behavior. The Docker build runs the regression tests before the image is finalized.
+The test suite covers application endpoints, Jira matching/history behavior, and core parser cases, including nested ZIP discovery, build-fingerprint mismatch handling, incomplete modules, invalid ZIPs, and upload-size behavior. The Docker build runs the regression tests before the image is finalized.
 
 ## CI/CD and server deployment
 
