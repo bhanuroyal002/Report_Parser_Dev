@@ -6,6 +6,7 @@ from flask import Flask, jsonify, render_template, request, Response
 from history import HistoryStore
 from parser import analyze_reports
 from report_builder import build_dashboard_html
+from jira_client import JiraClient
 
 BASE = Path(__file__).resolve().parent
 DB = os.getenv("DATABASE_PATH", str(BASE / "data" / "gct_report_parser.db"))
@@ -121,6 +122,21 @@ def analyze():
             return jsonify({"error": "Upload at least one report ZIP file."}), 400
 
         data = analyze_reports(paths)
+        # Jira is an optional, read-only enrichment step. A Jira outage or bad
+        # configuration must never prevent the core report analysis from working.
+        try:
+            JiraClient().enrich_dashboard(data)
+        except Exception:
+            app.logger.exception("Jira enrichment failed; returning report without Jira matches")
+            data["jiraIntegration"] = {
+                "configured": True,
+                "status": "error",
+                "message": "Jira lookup failed. Report analysis completed without Jira history.",
+                "matchedIssues": 0,
+            }
+            for finding in (data.get("failures") or []) + (data.get("incompleteModules") or []):
+                finding["jiraMatches"] = []
+                finding["jiraLookupStatus"] = "error"
         history.save(data)
         return jsonify(data)
 
