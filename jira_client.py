@@ -19,6 +19,7 @@ FIELDS = [
 ]
 MAX_SEARCH_TERMS = 24
 MAX_RESULTS_PER_QUERY = 100
+MAX_PAGES_PER_QUERY = 3
 MAX_MATCHES_PER_FINDING = 3
 TIMEOUT_SECONDS = 12
 
@@ -201,13 +202,25 @@ class JiraClient:
         if not phrases:
             return []
         jql = " OR ".join(f'text ~ "{phrase}"' for phrase in phrases)
-        result = self._request("/rest/api/3/search/jql", {
-            "jql": jql,
-            "maxResults": MAX_RESULTS_PER_QUERY,
-            "fields": FIELDS,
-            "expand": "changelog",
-        })
-        return result.get("issues", []) if isinstance(result, dict) else []
+        issues = []
+        next_page_token = None
+        for _ in range(MAX_PAGES_PER_QUERY):
+            payload = {
+                "jql": jql,
+                "maxResults": MAX_RESULTS_PER_QUERY,
+                "fields": FIELDS,
+                "expand": "changelog",
+            }
+            if next_page_token:
+                payload["nextPageToken"] = next_page_token
+            result = self._request("/rest/api/3/search/jql", payload)
+            if not isinstance(result, dict):
+                break
+            issues.extend(result.get("issues", []))
+            next_page_token = result.get("nextPageToken")
+            if not next_page_token or result.get("isLast") is True:
+                break
+        return issues
 
     def _details(self, issue):
         key = issue.get("key", "")
