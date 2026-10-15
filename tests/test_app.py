@@ -48,6 +48,25 @@ class UploadEndpointTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 200)
 
+    def test_analysis_succeeds_when_jira_is_not_configured(self):
+        dashboard = {
+            "overall": {"totalTests": 1, "failed": 1},
+            "suites": [],
+            "failures": [{"suite": "CTS", "module": "SampleModule", "testCase": "Sample#testFailure", "details": "assertion failed"}],
+            "incompleteModules": [],
+        }
+        with patch.object(webapp, "analyze_reports", return_value=dashboard), \
+             patch.object(webapp.history, "save"):
+            response = self.client.post(
+                "/api/analyze",
+                data={"files": (io.BytesIO(b"zip-ish"), "report.zip")},
+                content_type="multipart/form-data",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("jiraIntegration", response.get_json())
+        self.assertEqual(response.get_json()["jiraIntegration"]["status"], "not_configured")
+        self.assertEqual(response.get_json()["failures"][0]["jiraMatches"], [])
+
     def test_health_endpoint_checks_database(self):
         response = self.client.get("/healthz")
         self.assertEqual(response.status_code, 200)
